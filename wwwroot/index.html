@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Firebase Auth & API Test</title>
+    <!-- ADD FIREBASE SDK SCRIPTS -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-auth-compat.js"></script>
+    <style> /* Basic styling */ body{font-family:sans-serif;display:grid;place-content:center;padding:2rem;} button{margin-bottom:1rem;} div{padding:1rem;border:1px solid #ccc;word-break:break-all;} </style>
+</head>
+<body>
+    <h1>Firebase Auth & API Tester</h1>
+    <button id="google-signin-btn">1. Sign in with Google (via Firebase)</button>
+    <div id="token-area">Firebase ID Token will appear here...</div>
+    <hr>
+    <button id="sync-btn" disabled>2. Call /api/account/sync</button>
+    <div id="api-response-area">API Response will appear here...</div>
+
+    <script>
+        // =================================================================
+        // STEP 1: PASTE THE FIREBASE CONFIG OBJECT FROM YOUR FRIEND HERE
+        // =================================================================
+        const firebaseConfig = {
+        apiKey: "AIzaSyCwsXbxYZC2T1EtD0uUrWwjyx5o8wHSotE",
+        authDomain: "qrplatform-1d636.firebaseapp.com",
+        projectId: "qrplatform-1d636",
+        storageBucket: "qrplatform-1d636.firebasestorage.app",
+        messagingSenderId: "457044682082",
+        appId: "1:457044682082:web:7418222731c604f41cf83b",
+        measurementId: "G-GY2N3JW0YT"
+        };
+        
+        // =================================================================
+        // STEP 2: PASTE YOUR API's PUBLIC URL (DEV TUNNEL) HERE
+        // =================================================================
+        const API_BASE_URL = 'https://localhost:7093/';
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        
+        const googleSignInBtn = document.getElementById('google-signin-btn');
+        const tokenArea = document.getElementById('token-area');
+        const syncBtn = document.getElementById('sync-btn');
+        const apiResponseArea = document.getElementById('api-response-area');
+
+        let firebaseIdToken = null;
+
+        // --- Event Listener for Google Sign-In ---
+        googleSignInBtn.addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then((result) => {
+                    // This gives us the user object from Firebase
+                    const user = result.user;
+                    // This is the critical step: get the ID token
+                    return user.getIdToken();
+                })
+                .then((token) => {
+                    firebaseIdToken = token;
+                    tokenArea.textContent = firebaseIdToken;
+                    syncBtn.disabled = false; // Enable the sync button
+                    tokenArea.style.backgroundColor = '#d4edda';
+                })
+                .catch((error) => {
+                    console.error("Firebase Sign-In Error:", error);
+                    tokenArea.textContent = `Error: ${error.message}`;
+                    tokenArea.style.backgroundColor = '#f8d7da';
+                });
+        });
+
+        // --- Event Listener for Sync Button ---
+        syncBtn.addEventListener('click', () => {
+            if (!firebaseIdToken) {
+                apiResponseArea.textContent = "You must sign in first to get a token.";
+                return;
+            }
+
+            apiResponseArea.textContent = "Calling API...";
+            
+            fetch(API_BASE_URL + 'api/account/sync', {
+                method: 'POST',
+                headers: {
+                    // This is how you send the token to your API
+                    'Authorization': `Bearer ${firebaseIdToken}`
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    apiResponseArea.style.backgroundColor = '#f8d7da';
+                    return response.text(); // Get text for errors
+                }
+                apiResponseArea.style.backgroundColor = '#d4edda';
+                return response.text(); // Get text for success
+            })
+            .then(data => {
+                apiResponseArea.textContent = data;
+            })
+            .catch(error => {
+                console.error("API Call Error:", error);
+                apiResponseArea.textContent = `Error: ${error.message}`;
+                apiResponseArea.style.backgroundColor = '#f8d7da';
+            });
+        });
+    </script>
+</body>
+</html>

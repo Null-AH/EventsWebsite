@@ -1,0 +1,16 @@
+# C# / .NET Backend
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.idea/
+.vscode/
+
+# Secrets
+secrets.json
+appsettings.Development.json
+firebase-adminsdk.json
+
+# Operating System Files
+.DS_Store
+Thumbs.db
