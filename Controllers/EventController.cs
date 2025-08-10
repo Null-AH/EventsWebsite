@@ -75,9 +75,19 @@ namespace EventApi.Controllers
             if (attendeeFile == null || attendeeFile.Length == 0)
                 return BadRequest("Attendee file required");
 
-            if (attendeeFile.ContentType != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                return BadRequest("Invalid file type");
 
+            var allowedFileTypes = new[]
+                {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+                    "text/csv" // .csv
+                };
+
+            // 2. Check if the file's type is NOT in our allowed list
+            if (!allowedFileTypes.Contains(attendeeFile.ContentType))
+            {
+                // 3. Return a more helpful error message
+                return BadRequest("Invalid file type. Please upload an XLSX or CSV file.");
+            }
 
             var firebaseUid = User.FindFirst("user_id")?.Value;
 
@@ -107,22 +117,32 @@ namespace EventApi.Controllers
                 CreatingUser = user
             };
 
-            var createdEvent = await _eventRepo.CreateNewEventAsync(newEventInfo);
+            try
+            {
 
-            if (createdEvent == null)
-                return StatusCode(500, "An error occurred while creating the event.");
+                var createdEvent = await _eventRepo.CreateNewEventAsync(newEventInfo);
 
-            _backgroundJob.Enqueue<IImageGenerationService>(service => service.GenerateInvitationsForEventAsync(createdEvent.Id));
+                if (createdEvent == null)
+                    return StatusCode(500, "An error occurred while creating the event.");
 
-            //var zipFilePath = await _imageGen.GenerateInvitationsForEventAsync(createdEvent.Id);
+                _backgroundJob.Enqueue<IImageGenerationService>(service => service.GenerateInvitationsForEventAsync(createdEvent.Id));
 
-            //var fileBytes = await System.IO.File.ReadAllBytesAsync(zipFilePath);
+                //var zipFilePath = await _imageGen.GenerateInvitationsForEventAsync(createdEvent.Id);
+                //var fileBytes = await System.IO.File.ReadAllBytesAsync(zipFilePath);
+                //System.IO.File.Delete(zipFilePath);
+                //return File(fileBytes, "application/zip", "invitations.zip",enableRangeProcessing : true);
 
-            //System.IO.File.Delete(zipFilePath);
+                return AcceptedAtAction(nameof(GetById), new { id = createdEvent.Id }, createdEvent);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "An unexpected internal error occurred.");
+            }
 
-            //return File(fileBytes, "application/zip", "invitations.zip",enableRangeProcessing : true);
-
-            return AcceptedAtAction(nameof(GetById), new { id = createdEvent.Id }, createdEvent);
         }
 
 
@@ -205,7 +225,7 @@ namespace EventApi.Controllers
         public async Task<IActionResult> UpdateEvent([FromBody] UpdateEventRequestDto updateEventRequestDto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
-            var editedEvent = await _eventRepo.UpdateEvent(updateEventRequestDto.Id,updateEventRequestDto);
+            var editedEvent = await _eventRepo.UpdateEvent(updateEventRequestDto.Id, updateEventRequestDto);
             if (editedEvent == null)
             {
                 return NotFound("Event Do not exist");
@@ -230,6 +250,66 @@ namespace EventApi.Controllers
                 return NotFound("Event Do not exist");
             }
             return NoContent();
+        }
+
+
+        [HttpPost("{id:int}/check-in")]
+        [Authorize]
+        [ProducesResponseType(404)]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(500)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(401)]
+        public async Task<IActionResult> QrCheckIn([FromRoute] int id, [FromBody] EventCheckInRequestDto checkInRequestDto)
+        {
+            var firebaseUid = User.FindFirst("user_id")?.Value;
+
+            if (string.IsNullOrEmpty(firebaseUid))
+            {
+                return Unauthorized("Invalid token: Firebase UID is missing.");
+            }
+
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
+
+            if (user == null)
+            {
+                return Unauthorized("User profile does not exist. Please sync first.");
+            }
+
+            if (checkInRequestDto == null)
+                return BadRequest("Invalid Data!");
+
+            var checkInResult = await _eventRepo.EventCheckInAsync(id, user.Id, checkInRequestDto);
+
+            switch (checkInResult.Status)
+            {
+                case "Success":
+                    return Ok(checkInResult);
+                case "AlreadyCheckedIn":
+                    return Conflict(checkInResult);
+                case "NotFound":
+                    return NotFound(checkInResult);
+                default:
+                    return StatusCode(500, "An unknown error occured during check-in");
+            }
+        }
+        [HttpGet("{id:int}/count")]
+        [Authorize]
+        public async Task<IActionResult> GetCount(int id)
+        {
+            var firebaseUid = User.FindFirst("user_id")?.Value;
+            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized();
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
+            if (user == null) return Unauthorized();
+
+            var count = await _eventRepo.GetCurrentCheckedInCountAsync(id, user.Id);
+
+            if (count == null)
+            {
+                return NotFound("Event not found or you do not have permission to view it.");
+            }
+
+            return Ok(new { CheckedInCount = count });
         }
 
     }

@@ -19,7 +19,9 @@ namespace EventApi.Interfaces
         public Task<Event> GetEventByIdAsync(int id);
         public Task<bool> EventExistsAsync(string userId, CreateEventDto eventInfoToCheck);
         public Task<Event> DeleteEventByIdAsync(int id);
-        public Task<EventSummaryDto> UpdateEvent(int id,UpdateEventRequestDto updateEventRequestDto);
-        
+        public Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto);
+        public Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto);
+        public Task<int?> GetCurrentCheckedInCountAsync(int eventId, string userId);
+
     }
 }

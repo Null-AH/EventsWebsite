@@ -185,7 +185,60 @@ namespace EventApi.Repository
 
             await _context.SaveChangesAsync();
 
-            return eventModel.EventToSummaryDto(eventModel.Attendees.Count());        
+            return eventModel.EventToSummaryDto(eventModel.Attendees.Count());
+        }
+
+        public async Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto)
+        {
+            var attendee = await _context.Attendees
+            .FirstOrDefaultAsync(e => e.EventId == eventId &&
+                                e.Email == eventCheckInRequestDto.email &&
+                                e.Event.AppUserId == userId);
+
+
+            if (attendee == null) return new EventCheckInResultDto
+            {
+                Status = "NotFound",
+            };
+
+            var currentCount = await _context.Attendees.CountAsync(a => a.EventId == eventId && a.ChechkedIn);
+
+            if (attendee.ChechkedIn)
+            {
+                return new EventCheckInResultDto
+                {
+                    Status = "AlreadyCheckedIn",
+                    AttendeeName = attendee.Name,
+                    CheckedInCount = currentCount
+                };
+            }
+
+            attendee.ChechkedIn = true;
+            attendee.CheckedInTimestamp = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+
+            return new EventCheckInResultDto
+            {
+                Status = "Success",
+                AttendeeName = attendee.Name,
+                CheckedInCount = currentCount + 1
+            };
+        }
+
+        public async Task<int?> GetCurrentCheckedInCountAsync(int eventId, string userId)
+        {
+            var eventExists = await _context.Events
+                .AnyAsync(e => e.Id == eventId && e.AppUserId == userId);
+
+            if (!eventExists)
+            {
+                return null;
+            }
+
+            return await _context.Attendees
+                .CountAsync(a => a.EventId == eventId && a.ChechkedIn);
         }
     }
 }
