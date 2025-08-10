@@ -5,12 +5,19 @@
 *.suo
 .idea/
 .vscode/
+appsettings.json
 
 # Secrets
 secrets.json
 appsettings.Development.json
 firebase-adminsdk.json
+qrplatform-1d636-firebase-adminsdk-fbsvc-7e6405358b.json
+appsettings.json
 
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+# Generated images and zip downloads
+wwwroot/downloads/
+wwwroot/uploads/

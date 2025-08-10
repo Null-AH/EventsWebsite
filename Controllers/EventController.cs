@@ -28,7 +28,7 @@ namespace EventApi.Controllers
         private readonly IEventRepository _eventRepo;
         private readonly IImageGenerationService _imageGen;
         private readonly IBackgroundJobClient _backgroundJob;
-        public EventController(UserManager<AppUser> userManager, IEventRepository eventrepo, IImageGenerationService imageGen ,IBackgroundJobClient backgroundJob)
+        public EventController(UserManager<AppUser> userManager, IEventRepository eventrepo, IImageGenerationService imageGen, IBackgroundJobClient backgroundJob)
         {
             _eventRepo = eventrepo;
             _userManager = userManager;
@@ -38,7 +38,7 @@ namespace EventApi.Controllers
 
 
         [HttpPost("create")]
-        [Authorize]
+        //[Authorize]
         public async Task<IActionResult> Create([FromForm] string eventInfo, [FromForm] string templateInfo, IFormFile attendeeFile, IFormFile backgroundImage)
         {
 
@@ -92,7 +92,7 @@ namespace EventApi.Controllers
             {
                 return Unauthorized("User profile does not exist. Please sync first.");
             }
-        
+
             if (await _eventRepo.EventExistsAsync(user.Id, createEventDto))
             {
                 return Conflict("An event with this name and date has already been created.");
@@ -127,7 +127,7 @@ namespace EventApi.Controllers
 
 
         [HttpGet("all")]
-        [Authorize]
+        //[Authorize]
         [ProducesResponseType(typeof(IEnumerable<EventSummaryDto>), 200)]
         [ProducesResponseType(401)]
         [ProducesResponseType(404)]
@@ -154,9 +154,11 @@ namespace EventApi.Controllers
         }
 
         [HttpGet("{id:int}")]
+        //[Authorize]
         [ProducesResponseType(500)]
         [ProducesResponseType(200)]
-        [Authorize]        
+        [ProducesResponseType(401)]
+
         public async Task<IActionResult> GetById([FromRoute] int id)
         {
             var eventDetails = await _eventRepo.GetEventDetailsByIdAsync(id);
@@ -173,6 +175,8 @@ namespace EventApi.Controllers
         [ProducesResponseType(500)]
         [ProducesResponseType(200)]
         [ProducesResponseType(202)]
+        [ProducesResponseType(401)]
+
         public async Task<IActionResult> GetDownloadById([FromRoute] int id)
         {
             var eventInfo = await _eventRepo.GetEventByIdAsync(id);
@@ -188,6 +192,44 @@ namespace EventApi.Controllers
             }
 
             return Ok(eventInfo.GeneratedInvitationsZipUri);
+        }
+
+        [HttpPut("edit")]
+        //[Authorize]
+
+        [ProducesResponseType(404)]
+        [ProducesResponseType(500)]
+        [ProducesResponseType(401)]
+        [ProducesResponseType(200)]
+
+        public async Task<IActionResult> UpdateEvent([FromBody] UpdateEventRequestDto updateEventRequestDto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            var editedEvent = await _eventRepo.UpdateEvent(updateEventRequestDto.Id,updateEventRequestDto);
+            if (editedEvent == null)
+            {
+                return NotFound("Event Do not exist");
+            }
+
+            return Ok(editedEvent);
+        }
+
+        [HttpDelete("delete")]
+        //[Authorize]
+
+        [ProducesResponseType(404)]
+        [ProducesResponseType(204)]
+        [ProducesResponseType(500)]
+        [ProducesResponseType(401)]
+
+        public async Task<IActionResult> DeleteEvent([FromQuery] int id)
+        {
+            var deletedEvent = await _eventRepo.DeleteEventByIdAsync(id);
+            if (deletedEvent == null)
+            {
+                return NotFound("Event Do not exist");
+            }
+            return NoContent();
         }
 
     }

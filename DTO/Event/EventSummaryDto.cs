@@ -10,7 +10,7 @@ namespace EventApi.DTO.Event
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public DateTime EventDate { get; set; }
+        public DateOnly EventDate { get; set; }
         public int AttendeeCount { get; set; }
         public string? BackgroundImageUri { get; set; } = string.Empty;
 

@@ -25,10 +25,12 @@ namespace EventApi.Repository
     {
         private readonly AppDBContext _context;
         private readonly IFileHandlingService _fileHandle;
+        private readonly IWebHostEnvironment _webhost;
         public EventRepository(AppDBContext context, IWebHostEnvironment webHost, IFileHandlingService fileHandle)
         {
             _context = context;
             _fileHandle = fileHandle;
+            _webhost = webHost;
         }
 
         public async Task<Event> CreateNewEventAsync(NewEventInfo eventInfo)
@@ -99,7 +101,7 @@ namespace EventApi.Repository
 
             return eventModel.EventToEventDetailsDto();
         }
-        
+
         public async Task<Event> GetEventByIdAsync(int id)
         {
             var eventModel = await _context.Events.FirstOrDefaultAsync(e => e.Id == id);
@@ -122,6 +124,68 @@ namespace EventApi.Repository
                 e.EventDate == eventInfoToCheck.EventDate &&
                 e.CreatedAt >= fiveMinutesAgo
                 );
+        }
+
+        public async Task<Event> DeleteEventByIdAsync(int id)
+        {
+            var eventModel = await _context.Events.Include(e => e.Attendees).Include(e => e.TemplateElements).FirstOrDefaultAsync(e => e.Id == id);
+
+            if (eventModel == null)
+            {
+                return null;
+            }
+
+            var attendees = eventModel.Attendees.Select(i => i.Id);
+            var invitations = await _context.Invitations.Where(i => attendees.Contains(i.AttendeeId)).ToListAsync();
+
+            if (invitations.Any())
+            {
+                _context.Invitations.RemoveRange(invitations);
+            }
+            if (eventModel.Attendees.Any())
+            {
+                _context.Attendees.RemoveRange(eventModel.Attendees);
+            }
+            if (eventModel.TemplateElements.Any())
+            {
+                _context.TemplateElements.RemoveRange(eventModel.TemplateElements);
+            }
+            if (!string.IsNullOrEmpty(eventModel.BackgroundImageUri))
+            {
+                var imagePath = Path.Combine(_webhost.WebRootPath, eventModel.BackgroundImageUri.TrimStart('/'));
+                if (System.IO.File.Exists(imagePath))
+                {
+                    System.IO.File.Delete(imagePath);
+                }
+            }
+            if (!string.IsNullOrEmpty(eventModel.GeneratedInvitationsZipUri))
+            {
+                var zipPath = Path.Combine(_webhost.WebRootPath, eventModel.GeneratedInvitationsZipUri.TrimStart('/'));
+                if (System.IO.File.Exists(zipPath))
+                {
+                    System.IO.File.Delete(zipPath);
+                }
+            }
+            _context.Events.Remove(eventModel);
+
+            await _context.SaveChangesAsync();
+            return eventModel;
+        }
+
+        public async Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto)
+        {
+            var eventModel = await _context.Events.Include(e => e.Attendees).FirstOrDefaultAsync(e => e.Id == id);
+            if (eventModel == null)
+            {
+                return null;
+            }
+
+            eventModel.Name = updateEventRequestDto.Name;
+            eventModel.EventDate = updateEventRequestDto.EventDate;
+
+            await _context.SaveChangesAsync();
+
+            return eventModel.EventToSummaryDto(eventModel.Attendees.Count());        
         }
     }
 }

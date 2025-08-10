@@ -17,6 +17,9 @@ namespace EventApi.Interfaces
         public Task<List<EventSummaryDto>> GetAllUserEventsAsync(AppUser user, EventQueryObject query);
         public Task<EventDetailsDto> GetEventDetailsByIdAsync(int id);
         public Task<Event> GetEventByIdAsync(int id);
-        public Task<bool> EventExistsAsync(string userId,CreateEventDto eventInfoToCheck);
+        public Task<bool> EventExistsAsync(string userId, CreateEventDto eventInfoToCheck);
+        public Task<Event> DeleteEventByIdAsync(int id);
+        public Task<EventSummaryDto> UpdateEvent(int id,UpdateEventRequestDto updateEventRequestDto);
+        
     }
 }

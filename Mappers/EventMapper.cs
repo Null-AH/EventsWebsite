@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using EventApi.DTO.Event;
 using EventApi.Migrations;
 using EventApi.Models;
+using Humanizer.DateTimeHumanizeStrategy;
 using NPOI.SS.Formula.Functions;
 
 namespace EventApi.Mappers
@@ -34,7 +35,6 @@ namespace EventApi.Mappers
                 BackgroundImageUri = eventModel.BackgroundImageUri
             };
         }
-
         public static EventDetailsDto EventToEventDetailsDto(this Event eventModel)
         {
             return new EventDetailsDto
@@ -49,5 +49,6 @@ namespace EventApi.Mappers
                 GeneratedInvitationFullPath = eventModel.GeneratedInvitationsZipUri
             };
         }
+
     }
 }

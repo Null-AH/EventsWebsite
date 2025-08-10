@@ -12,7 +12,7 @@ namespace EventApi.DTO.Event
     {
         public int Id { get; set; } 
         public string Name { get; set; } = string.Empty;
-        public DateTime EventDate { get; set; }
+        public DateOnly EventDate { get; set; }
         public string? Location { get; set; }
         public string? BackgroundImageUri { get; set; }
         public string? GeneratedInvitationFullPath { get; set; }

@@ -14,7 +14,7 @@ namespace EventApi.Models
 
         public string Name { get; set; } = string.Empty; 
         
-        public DateTime EventDate { get; set; }
+        public DateOnly EventDate { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public string? Location { get; set; } 

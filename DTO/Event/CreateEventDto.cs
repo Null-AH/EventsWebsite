@@ -12,7 +12,7 @@ namespace EventApi.DTO.Event
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
         [JsonPropertyName("eventDate")]
-        public DateTime EventDate { get; set; }
+        public DateOnly EventDate { get; set; }
 
         public string? Location { get; set; } 
 
