@@ -18,6 +18,8 @@ using EventApi.DTO.Query;
 using NPOI.HSSF.Record;
 using System.Linq.Expressions;
 using MathNet.Numerics.Financial;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Tokens;
 
 namespace EventApi.Repository
 {
@@ -26,26 +28,44 @@ namespace EventApi.Repository
         private readonly AppDBContext _context;
         private readonly IFileHandlingService _fileHandle;
         private readonly IWebHostEnvironment _webhost;
-        public EventRepository(AppDBContext context, IWebHostEnvironment webHost, IFileHandlingService fileHandle)
+        private readonly UserManager<AppUser> _userManager;
+        public EventRepository(AppDBContext context, IWebHostEnvironment webHost, IFileHandlingService fileHandle, UserManager<AppUser> userManager)
         {
             _context = context;
             _fileHandle = fileHandle;
             _webhost = webHost;
+            _userManager = userManager;
         }
 
         public async Task<Event> CreateNewEventAsync(NewEventInfo eventInfo)
         {
-            var backgroundImageString = await _fileHandle.SaveImageAsync(eventInfo.BackgroundImage);
+            var user = eventInfo.CreatingUser;
+            var backgroundImageString = string.Empty;
+
+            if (eventInfo.BackgroundImage != null)
+            {
+
+                backgroundImageString = await _fileHandle.SaveImageAsync(eventInfo.BackgroundImage);
+            }
+            else
+            {
+                var eventNameEncoded = System.Net.WebUtility.UrlEncode(eventInfo.EventDetails.Name);
+                backgroundImageString = $"https://placehold.co/600x400/2B2543/FFFFFF/png?text={eventNameEncoded}";
+            }
 
             var eventModel = eventInfo.EventDetails.ToEventFromEventRequestDto(eventInfo.CreatingUser, backgroundImageString);
 
             await _context.Events.AddAsync(eventModel);
             await _context.SaveChangesAsync();
 
-            var templateModel = eventInfo.TemplateElements.ToTemplateElementsFromTemplateDto(eventModel.Id);
+            if (eventInfo.TemplateElements != null)
+            {
 
-            await _context.TemplateElements.AddRangeAsync(templateModel);
-            await _context.SaveChangesAsync();
+                var templateModel = eventInfo.TemplateElements.ToTemplateElementsFromTemplateDto(eventModel.Id);
+
+                await _context.TemplateElements.AddRangeAsync(templateModel);
+                await _context.SaveChangesAsync();
+            }
 
             List<Attendee> attendees = await _fileHandle.ParseAttendeesAsync(eventInfo.AttendeeFile);
 
@@ -136,12 +156,12 @@ namespace EventApi.Repository
             }
 
             var attendees = eventModel.Attendees.Select(i => i.Id);
-            var invitations = await _context.Invitations.Where(i => attendees.Contains(i.AttendeeId)).ToListAsync();
+            // var invitations = await _context.Invitations.Where(i => attendees.Contains(i.AttendeeId)).ToListAsync();
 
-            if (invitations.Any())
-            {
-                _context.Invitations.RemoveRange(invitations);
-            }
+            // if (invitations.Any())
+            // {
+            //     _context.Invitations.RemoveRange(invitations);
+            // }
             if (eventModel.Attendees.Any())
             {
                 _context.Attendees.RemoveRange(eventModel.Attendees);
@@ -239,6 +259,76 @@ namespace EventApi.Repository
 
             return await _context.Attendees
                 .CountAsync(a => a.EventId == eventId && a.ChechkedIn);
+        }
+
+        public async Task AddCollaboratorsAsync
+        (List<AddCollaboratorsRequestDto> addCollaboratorsDto
+        , AppUser user
+        , int eventId)
+        {
+            var userRoleForEvent = await _context.EventCollaborators.FirstOrDefaultAsync(e => e.UserId == user.Id && e.EventId == eventId);
+
+
+            if (userRoleForEvent == null || userRoleForEvent.Role != Role.Owner)
+            {
+                throw new UnauthorizedAccessException("You do not have permission to add collaborators to this event.");
+            }
+
+            List<string> collaboratorsEmails = addCollaboratorsDto.Select(e => e.Email.ToUpperInvariant()).Distinct().ToList();
+
+            if (!collaboratorsEmails.Any())
+            {
+                return;
+            }
+            var existingCollaboratorEmails = await _context.EventCollaborators
+            .Where(ec => ec.EventId == eventId && ec.AppUser != null && collaboratorsEmails.Contains(ec.AppUser.Email))
+            .Select(ec => ec.AppUser.Email.ToUpperInvariant()).ToListAsync();
+
+            var pendingInvitationEmails = await _context.CollaboratorsInvitations
+            .Where(e => existingCollaboratorEmails.Contains(e.InvitedEmail) && e.EventId == eventId)
+            .Select(e=> e.InvitedEmail.ToUpperInvariant()).ToListAsync();
+
+            var emailsToProcess = collaboratorsEmails.Except(existingCollaboratorEmails)
+            .Except(pendingInvitationEmails).ToList();
+
+            if (!emailsToProcess.Any()) return;
+
+            var existingUsers = await _userManager.Users
+            .Where(e => e.Email != null && emailsToProcess.Contains(e.Email)).ToListAsync();
+
+            var existingUsersEmails = existingUsers.Select(e => e.Email.ToUpperInvariant()).ToList();
+
+            var collaboratorsToAdd = addCollaboratorsDto
+                .Join(existingUsers, dto => dto.Email.ToUpperInvariant(), user => user.Email.ToUpperInvariant()
+                , (dto, user) => new EventCollaborators
+                {
+                    UserId = user.Id,
+                    Role = Enum.Parse<Role>(dto.Role, true),
+                    EventId = eventId
+                });
+            await _context.EventCollaborators.AddRangeAsync(collaboratorsToAdd);
+
+            var nonExistingUsersEmails = collaboratorsEmails.Where(email => !existingUsersEmails.Contains(email));
+
+            var collaboratorsToInvite = addCollaboratorsDto
+            .Join(nonExistingUsersEmails, dto => dto.Email.ToUpperInvariant(), user => user.ToUpperInvariant()
+                    , (dto, user) => new CollaboratorsInvitation
+                    {
+                        InvitedEmail = user,
+                        Status = Status.Pending,
+                        Role = Enum.Parse<Role>(dto.Role, true),
+                        EventId = eventId,
+                        InvitationToken = Guid.NewGuid().ToString()
+                    });
+
+            if (collaboratorsToInvite.Any())
+            {
+
+                await _context.CollaboratorsInvitations.AddRangeAsync(collaboratorsToInvite);
+            }
+
+            await _context.SaveChangesAsync();
+            return;
         }
     }
 }

@@ -22,6 +22,6 @@ namespace EventApi.Interfaces
         public Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto);
         public Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto);
         public Task<int?> GetCurrentCheckedInCountAsync(int eventId, string userId);
-
+        public Task AddCollaboratorsAsync(List<AddCollaboratorsRequestDto> addCollaboratorsDto, AppUser user,int eventId);
     }
 }

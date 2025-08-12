@@ -12,9 +12,11 @@ using MathNet.Numerics.Interpolation;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using NPOI.HSSF.Record;
 using NPOI.Util;
 using QRCoder;
 using SkiaSharp;
+using SkiaSharp.HarfBuzz;
 
 namespace EventApi.Services
 {
@@ -49,7 +51,10 @@ namespace EventApi.Services
             using var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read);
             using var originalBitmap = SKBitmap.Decode(stream);
 
-            using var typeface = SKTypeface.FromFamilyName(templateNameElement.FontTheme) ?? SKTypeface.Default;
+            var fontPath = Path.Combine(_hostEnvironment.WebRootPath, "Fonts", "NotoNaskhArabic-Regular.ttf");
+
+            //using var typeface = SKTypeface.FromFamilyName(templateNameElement.FontTheme) ?? SKTypeface.Default;
+            using var typeface = SKTypeface.FromFile(fontPath);
 
             using var paint = new SKPaint
             {
@@ -66,14 +71,16 @@ namespace EventApi.Services
             var downloadsFolder = Path.Combine(_hostEnvironment.WebRootPath, $"downloads/generated_invitations/{safeEventName}_{eventId}/");
             Directory.CreateDirectory(downloadsFolder);
 
-            foreach (var attendee in eventInfo.Attendees)
+            //var newInvitations = new System.Collections.Concurrent.ConcurrentBag<Invitation>();
+
+            await Parallel.ForEachAsync(eventInfo.Attendees, async (attendee, cancellationToken) =>
             {
                 using var backgroundBitmap = originalBitmap.Copy();
 
                 using var surface = SKSurface.Create(backgroundBitmap.Info, backgroundBitmap.GetPixels());
                 var canvas = surface.Canvas;
 
-                float textSize = targetHeight; 
+                float textSize = targetHeight;
                 SKRect textBounds = new SKRect();
                 using var font = new SKFont(typeface);
 
@@ -81,16 +88,18 @@ namespace EventApi.Services
                 {
                     font.Size = textSize;
 
-                    font.MeasureText(attendee.Name,out textBounds);
+                    font.MeasureText(attendee.Name, out textBounds);
 
                     if (textBounds.Width <= targetWidth && textBounds.Height <= targetHeight) break;
                     textSize -= 1f;
                     if (textSize <= 5) break;
                 }
 
-                float baselineY = (float)templateNameElement.Y + (targetHeight - textBounds.Height) / 2 - textBounds.Top;
-                canvas.DrawText(attendee.Name, (float)templateNameElement.X, baselineY,font ,paint);
-
+                using (var shaper = new SKShaper(typeface))
+                {
+                    float baselineY = (float)templateNameElement.Y + (targetHeight - textBounds.Height) / 2 - textBounds.Top;
+                    canvas.DrawShapedText(shaper,attendee.Name, (float)templateNameElement.X, baselineY, font, paint);
+                }
                 //var qrCodePayload = Guid.NewGuid().ToString();
                 var qrCodePayload = attendee.Email;
                 using var qrGenerator = new QRCodeGenerator();
@@ -99,8 +108,8 @@ namespace EventApi.Services
                 using var pngQrCode = new PngByteQRCode(qrCodeData);
 
                 var darkColor = new byte[] { 0, 0, 0, 255 };      // Black, fully opaque
-                var lightColor = new byte[] { 255, 255, 255}; 
-                byte[] qrCodeAsPngBytes = pngQrCode.GetGraphic(20,darkColor,lightColor,false);
+                var lightColor = new byte[] { 255, 255, 255 };
+                byte[] qrCodeAsPngBytes = pngQrCode.GetGraphic(20, darkColor, lightColor, false);
 
                 using var qrCodeBitmap = SKBitmap.Decode(qrCodeAsPngBytes);
 
@@ -111,6 +120,19 @@ namespace EventApi.Services
                     (float)(templateQrElement.Y + templateQrElement.Height)
                 );
                 canvas.DrawBitmap(qrCodeBitmap, destRect);
+                using (var qrBorder = new SKPaint
+                {
+                    Style = SKPaintStyle.Stroke,
+                    Color = templateNameElement.FontColor == null ?
+                        SKColors.White
+                        : SKColor.Parse(templateNameElement.FontColor),
+                    StrokeWidth = 1,
+                    IsAntialias = true
+                }) 
+                {
+                    canvas.DrawRect(destRect, qrBorder);
+                }
+
 
                 using var finalImage = surface.Snapshot();
                 using var data = finalImage.Encode(SKEncodedImageFormat.Jpeg, 90);
@@ -121,19 +143,22 @@ namespace EventApi.Services
 
                 var GeneratedInvitationFullPath = Path.Combine(downloadsFolder, fileName);
 
-                var newInvitation = new Invitation
-                {
-                    AttendeeId = attendee.Id,
-                    //UniqueQRCode = qrCodePayload
-                };
-                await _context.Invitations.AddAsync(newInvitation);
+                // var newInvitation = new Invitation
+                // {
+                //     AttendeeId = attendee.Id,
+                //     //UniqueQRCode = qrCodePayload
+                // };
+
+                // newInvitations.Add(newInvitation);
 
                 await using (var fileStream = new FileStream(GeneratedInvitationFullPath, FileMode.Create))
                 {
                     await fileStream.WriteAsync(data.ToArray());
                 }
 
-            }
+            });
+
+            //await _context.Invitations.AddRangeAsync(newInvitations);
 
             var zipFileDirectory = Path.Combine(_hostEnvironment.WebRootPath, $"downloads/CompressedFiles");
             var zipFileFullPath = Path.Combine(zipFileDirectory, $"{safeEventName}_{eventId}.zip");

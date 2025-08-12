@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
@@ -36,9 +37,73 @@ namespace EventApi.Controllers
             _backgroundJob = backgroundJob;
         }
 
+        [HttpPost("create-free")]
+        [Authorize]
+        public async Task<IActionResult> CreateFree([FromForm] string eventInfo, IFormFile attendeeFile)
+        {
+            var serializerOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            CreateEventDto? createEventDto = JsonSerializer.Deserialize<CreateEventDto>(eventInfo);
+            if (createEventDto == null || string.IsNullOrWhiteSpace(createEventDto.Name))
+            {
+                return BadRequest("Event name is missing or invalid.");
+            }
+            if (attendeeFile == null || attendeeFile.Length == 0)
+                return BadRequest("Attendee file required");
+
+            var allowedFileTypes = new[]
+            {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+                "text/csv" // .csv
+            };
+            if (!allowedFileTypes.Contains(attendeeFile.ContentType))
+            {
+                // 3. Return a more helpful error message
+                return BadRequest("Invalid file type. Please upload an XLSX or CSV file.");
+            }
+
+            var firebaseUid = User.FindFirst("user_id")?.Value;
+
+            if (string.IsNullOrEmpty(firebaseUid))
+            {
+                return Unauthorized("Invalid token: Firebase UID is missing.");
+            }
+
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
+
+            if (user == null)
+            {
+                return Unauthorized("User profile does not exist. Please sync first.");
+            }
+
+            if (await _eventRepo.EventExistsAsync(user.Id, createEventDto))
+            {
+                return Conflict("An event with this name and date has already been created.");
+            }
+
+            var newEventInfo = new NewEventInfo
+            {
+                EventDetails = createEventDto,
+                TemplateElements = null,
+                AttendeeFile = attendeeFile,
+                BackgroundImage = null,
+                CreatingUser = user
+            };
+
+            var createdEvent = await _eventRepo.CreateNewEventAsync(newEventInfo);
+
+            if (createdEvent == null)
+                return StatusCode(500, "An error occurred while creating the event.");
+
+            return Ok();
+        }
+
 
         [HttpPost("create")]
-        //[Authorize]
+        [Authorize]
         public async Task<IActionResult> Create([FromForm] string eventInfo, [FromForm] string templateInfo, IFormFile attendeeFile, IFormFile backgroundImage)
         {
 
@@ -147,7 +212,7 @@ namespace EventApi.Controllers
 
 
         [HttpGet("all")]
-        //[Authorize]
+        [Authorize]
         [ProducesResponseType(typeof(IEnumerable<EventSummaryDto>), 200)]
         [ProducesResponseType(401)]
         [ProducesResponseType(404)]
@@ -174,7 +239,7 @@ namespace EventApi.Controllers
         }
 
         [HttpGet("{id:int}")]
-        //[Authorize]
+        [Authorize]
         [ProducesResponseType(500)]
         [ProducesResponseType(200)]
         [ProducesResponseType(401)]
@@ -215,7 +280,7 @@ namespace EventApi.Controllers
         }
 
         [HttpPut("edit")]
-        //[Authorize]
+        [Authorize]
 
         [ProducesResponseType(404)]
         [ProducesResponseType(500)]
@@ -235,7 +300,7 @@ namespace EventApi.Controllers
         }
 
         [HttpDelete("delete")]
-        //[Authorize]
+        [Authorize]
 
         [ProducesResponseType(404)]
         [ProducesResponseType(204)]
@@ -311,6 +376,24 @@ namespace EventApi.Controllers
 
             return Ok(new { CheckedInCount = count });
         }
+
+        [HttpPost("{id:int}/addteam")]
+        //[Authorize]
+
+        public async Task<IActionResult> AddCollaborators([FromBody] List<AddCollaboratorsRequestDto> addCollaboratorsDto,int id)
+        {
+            var firebaseUid = User.FindFirst("user_id")?.Value;
+            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized();
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
+            if (user == null) return Unauthorized();
+
+            await _eventRepo.AddCollaboratorsAsync(addCollaboratorsDto, user,id);
+
+            return Ok("Almost Done!");
+        }
+
+        
+
 
     }
 

@@ -4,6 +4,7 @@ using EventApi.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EventApi.Migrations
 {
     [DbContext(typeof(AppDBContext))]
-    partial class AppDBContextModelSnapshot : ModelSnapshot
+    [Migration("20250811122918_AddTierToUser")]
+    partial class AddTierToUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -54,38 +57,6 @@ namespace EventApi.Migrations
                     b.ToTable("Attendees");
                 });
 
-            modelBuilder.Entity("EventApi.Models.CollaboratorsInvitation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("EventId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("InvitationToken")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("InvitedEmail")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("Role")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EventId");
-
-                    b.ToTable("CollaboratorsInvitations");
-                });
-
             modelBuilder.Entity("EventApi.Models.Event", b =>
                 {
                     b.Property<int>("Id")
@@ -95,6 +66,7 @@ namespace EventApi.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AppUserId")
+                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("BackgroundImageUri")
@@ -129,22 +101,26 @@ namespace EventApi.Migrations
                     b.ToTable("Events");
                 });
 
-            modelBuilder.Entity("EventApi.Models.EventCollaborators", b =>
+            modelBuilder.Entity("EventApi.Models.Invitation", b =>
                 {
-                    b.Property<string>("UserId")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<int>("EventId")
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    b.Property<int>("Role")
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AttendeeId")
                         .HasColumnType("int");
 
-                    b.HasKey("UserId", "EventId");
+                    b.Property<Guid>("UniqueQRCode")
+                        .HasColumnType("uniqueidentifier");
 
-                    b.HasIndex("EventId");
+                    b.HasKey("Id");
 
-                    b.ToTable("EventCollaborators");
+                    b.HasIndex("AttendeeId")
+                        .IsUnique();
+
+                    b.ToTable("Invitations");
                 });
 
             modelBuilder.Entity("EventApi.Models.TemplateElement", b =>
@@ -212,6 +188,20 @@ namespace EventApi.Migrations
                         .HasFilter("[NormalizedName] IS NOT NULL");
 
                     b.ToTable("AspNetRoles", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "1865d0d9-7ac1-422d-95bb-8e1a34f8c062",
+                            Name = "Admin",
+                            NormalizedName = "ADMIN"
+                        },
+                        new
+                        {
+                            Id = "3c0bacc4-9d3e-44d8-a995-5b75be32f346",
+                            Name = "User",
+                            NormalizedName = "USER"
+                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -407,7 +397,7 @@ namespace EventApi.Migrations
                     b.Property<string>("PictureUrl")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("Tier")
+                    b.Property<int>("Tier")
                         .HasColumnType("int");
 
                     b.HasDiscriminator().HasValue("AppUser");
@@ -424,43 +414,26 @@ namespace EventApi.Migrations
                     b.Navigation("Event");
                 });
 
-            modelBuilder.Entity("EventApi.Models.CollaboratorsInvitation", b =>
-                {
-                    b.HasOne("EventApi.Models.Event", "Event")
-                        .WithMany()
-                        .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Event");
-                });
-
             modelBuilder.Entity("EventApi.Models.Event", b =>
                 {
                     b.HasOne("EventApi.Models.AppUser", "AppUser")
                         .WithMany()
-                        .HasForeignKey("AppUserId");
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("AppUser");
                 });
 
-            modelBuilder.Entity("EventApi.Models.EventCollaborators", b =>
+            modelBuilder.Entity("EventApi.Models.Invitation", b =>
                 {
-                    b.HasOne("EventApi.Models.Event", "Event")
-                        .WithMany()
-                        .HasForeignKey("EventId")
+                    b.HasOne("EventApi.Models.Attendee", "Attendee")
+                        .WithOne("Invitation")
+                        .HasForeignKey("EventApi.Models.Invitation", "AttendeeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("EventApi.Models.AppUser", "AppUser")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("AppUser");
-
-                    b.Navigation("Event");
+                    b.Navigation("Attendee");
                 });
 
             modelBuilder.Entity("EventApi.Models.TemplateElement", b =>
@@ -523,6 +496,11 @@ namespace EventApi.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("EventApi.Models.Attendee", b =>
+                {
+                    b.Navigation("Invitation");
                 });
 
             modelBuilder.Entity("EventApi.Models.Event", b =>

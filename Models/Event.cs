@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace EventApi.Models
 {
 
-    [Table("Events")] // Good practice to explicitly name the table
+    [Table("Events")]
     public class Event
     {
         public int Id { get; set; } 
@@ -26,7 +26,7 @@ namespace EventApi.Models
         public string? GeneratedInvitationsZipUri { get; set; }
 
 
-        public string AppUserId { get; set; } 
+        public string? AppUserId { get; set; } 
 
         public AppUser AppUser { get; set; }
 

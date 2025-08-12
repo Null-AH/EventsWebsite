@@ -19,8 +19,6 @@ namespace EventApi.Models
         public int EventId { get; set; }
         public Event Event { get; set; }
 
-        public Invitation? Invitation { get; set; }     
-
         
     }
 }
