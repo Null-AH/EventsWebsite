@@ -47,12 +47,12 @@ namespace api.Controllers
             var userName = User.FindFirst("name")?.Value;
             var picture = User.FindFirst("picture")?.Value;
 
-             _logger.LogInformation("--- SYNC START ---");
-            _logger.LogInformation("Sync request for Firebase UID: {FirebaseUid}, Email: {Email}", firebaseUid, email);
+             //_logger.LogInformation("--- SYNC START ---");
+            //_logger.LogInformation("Sync request for Firebase UID: {FirebaseUid}, Email: {Email}", firebaseUid, email);
 
             if (string.IsNullOrEmpty(firebaseUid) || string.IsNullOrEmpty(email))
             {
-                _logger.LogError("Sync failed: Token is missing UID or Email.");
+                //_logger.LogError("Sync failed: Token is missing UID or Email.");
                 return BadRequest($"Invalid token information from Firebase.\nUsername : {userName}\nEmail:{email}\n{claims}");
             }
 
@@ -63,7 +63,7 @@ namespace api.Controllers
 
             if (existingUser == null)
             {
-                 _logger.LogInformation("User not found in DB. Creating new user.");
+                 //_logger.LogInformation("User not found in DB. Creating new user.");
                 char initialChar = !string.IsNullOrEmpty(userName) ? userName[0] : email[0];
                 string placeHolderLetter = char.ToUpper(initialChar).ToString();
                 var newUser = new AppUser
@@ -84,21 +84,21 @@ namespace api.Controllers
                     return StatusCode(500, result.Errors);
                 }
                 userToProcess = newUser;
-                _logger.LogInformation("New user created successfully. AppUser ID: {UserId}", userToProcess.Id);
+                //_logger.LogInformation("New user created successfully. AppUser ID: {UserId}", userToProcess.Id);
             }
             else
             {
-                 _logger.LogInformation("Found existing user with AppUser ID: {UserId}. Checking for updates.", existingUser.Id);
+                 //_logger.LogInformation("Found existing user with AppUser ID: {UserId}. Checking for updates.", existingUser.Id);
                 bool needsUpdate = false;
                 if (existingUser.FirebaseUid != firebaseUid)
                 {
-                    _logger.LogWarning("Existing user was found by email but is MISSING FirebaseUid. Updating UID from {OldUid} to {NewUid}", existingUser.FirebaseUid, firebaseUid);
+                    //_logger.LogWarning("Existing user was found by email but is MISSING FirebaseUid. Updating UID from {OldUid} to {NewUid}", existingUser.FirebaseUid, firebaseUid);
                     existingUser.FirebaseUid = firebaseUid;
                     needsUpdate = true;
                 }
                 if (existingUser.UserName != firebaseUid)
                 {
-                    _logger.LogWarning("Existing user was found by email but is MISSING UserName. Updating UserName from {OldUid} to {NewUid}", existingUser.UserName, firebaseUid);
+                    //_logger.LogWarning("Existing user was found by email but is MISSING UserName. Updating UserName from {OldUid} to {NewUid}", existingUser.UserName, firebaseUid);
                     existingUser.UserName = firebaseUid;
                     needsUpdate = true;
                 }
@@ -114,7 +114,7 @@ namespace api.Controllers
                 }
                 if (needsUpdate)
                 {
-                    _logger.LogInformation("Updating user profile.");
+                    //_logger.LogInformation("Updating user profile.");
                     var updateResult = await _userManager.UpdateAsync(existingUser);
                     if (!updateResult.Succeeded)
                     {
@@ -125,17 +125,17 @@ namespace api.Controllers
             }
 
 
-            _logger.LogInformation("Processing invitations for AppUser ID: {UserId} with Email: {UserEmail}", userToProcess.Id, userToProcess.Email);
+            //_logger.LogInformation("Processing invitations for AppUser ID: {UserId} with Email: {UserEmail}", userToProcess.Id, userToProcess.Email);
 
             var pendingInvitedUsers = await _context.CollaboratorsInvitations
             .Where(e => e.InvitedEmail == userToProcess.Email && e.Status == Status.Pending).ToListAsync();
 
             if (pendingInvitedUsers.Any())
             {
-                _logger.LogInformation("Found {Count} pending invitations.", pendingInvitedUsers.Count);
+                //_logger.LogInformation("Found {Count} pending invitations.", pendingInvitedUsers.Count);
                 foreach (var invitation in pendingInvitedUsers)
                 {
-                    _logger.LogInformation("Processing invitation for Event ID: {EventId}. Creating EventCollaborators link for AppUser ID: {UserId}", invitation.EventId, userToProcess.Id);
+                    //_logger.LogInformation("Processing invitation for Event ID: {EventId}. Creating EventCollaborators link for AppUser ID: {UserId}", invitation.EventId, userToProcess.Id);
 
                     var alreadyCollaborator = await _context.EventCollaborators
                     .AnyAsync(ec => ec.EventId == invitation.EventId &&
@@ -156,13 +156,13 @@ namespace api.Controllers
                 
 
                 await _context.SaveChangesAsync();
-                 _logger.LogInformation("Saved changes for invitations.");
+                 //_logger.LogInformation("Saved changes for invitations.");
             }
               else
             {
-                _logger.LogInformation("No pending invitations found for this user.");
+                //_logger.LogInformation("No pending invitations found for this user.");
             }
-             _logger.LogInformation("--- SYNC END ---");
+             //_logger.LogInformation("--- SYNC END ---");
             return Ok("User synced successfully.");
         }
     }
