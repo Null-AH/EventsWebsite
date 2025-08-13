@@ -125,17 +125,17 @@ namespace api.Controllers
             }
 
 
-            //_logger.LogInformation("Processing invitations for AppUser ID: {UserId} with Email: {UserEmail}", userToProcess.Id, userToProcess.Email);
+            _logger.LogInformation("Processing invitations for AppUser ID: {UserId} with Email: {UserEmail}", userToProcess.Id, userToProcess.Email);
 
             var pendingInvitedUsers = await _context.CollaboratorsInvitations
             .Where(e => e.InvitedEmail == userToProcess.Email && e.Status == Status.Pending).ToListAsync();
 
             if (pendingInvitedUsers.Any())
             {
-                //_logger.LogInformation("Found {Count} pending invitations.", pendingInvitedUsers.Count);
+                _logger.LogInformation("Found {Count} pending invitations.", pendingInvitedUsers.Count);
                 foreach (var invitation in pendingInvitedUsers)
                 {
-                    //_logger.LogInformation("Processing invitation for Event ID: {EventId}. Creating EventCollaborators link for AppUser ID: {UserId}", invitation.EventId, userToProcess.Id);
+                    _logger.LogInformation("Processing invitation for Event ID: {EventId}. Creating EventCollaborators link for AppUser ID: {UserId}", invitation.EventId, userToProcess.Id);
 
                     var alreadyCollaborator = await _context.EventCollaborators
                     .AnyAsync(ec => ec.EventId == invitation.EventId &&
@@ -156,11 +156,11 @@ namespace api.Controllers
                 
 
                 await _context.SaveChangesAsync();
-                 //_logger.LogInformation("Saved changes for invitations.");
+                 _logger.LogInformation("Saved changes for invitations.");
             }
               else
             {
-                //_logger.LogInformation("No pending invitations found for this user.");
+                _logger.LogInformation("No pending invitations found for this user.");
             }
              //_logger.LogInformation("--- SYNC END ---");
             return Ok("User synced successfully.");
