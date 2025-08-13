@@ -20,6 +20,8 @@ using System.Linq.Expressions;
 using MathNet.Numerics.Financial;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
+using EventApi.Services;
+using EventApi.Helpers;
 
 namespace EventApi.Repository
 {
@@ -29,12 +31,15 @@ namespace EventApi.Repository
         private readonly IFileHandlingService _fileHandle;
         private readonly IWebHostEnvironment _webhost;
         private readonly UserManager<AppUser> _userManager;
-        public EventRepository(AppDBContext context, IWebHostEnvironment webHost, IFileHandlingService fileHandle, UserManager<AppUser> userManager)
+        private readonly ILogger<EventRepository> _logger;
+
+        public EventRepository(ILogger<EventRepository> logger, AppDBContext context, IWebHostEnvironment webHost, IFileHandlingService fileHandle, UserManager<AppUser> userManager)
         {
             _context = context;
             _fileHandle = fileHandle;
             _webhost = webHost;
             _userManager = userManager;
+            _logger = logger;
         }
 
         public async Task<Event> CreateNewEventAsync(NewEventInfo eventInfo)
@@ -75,14 +80,23 @@ namespace EventApi.Repository
             }
 
             await _context.Attendees.AddRangeAsync(attendees);
-            await _context.SaveChangesAsync();
 
+            var addToCollaborators = new EventCollaborators
+            {
+                UserId = user.Id,
+                EventId = eventModel.Id,
+                Role = Role.Owner
+            };
+
+            await _context.EventCollaborators.AddAsync(addToCollaborators);
+
+            await _context.SaveChangesAsync();
             return eventModel;
         }
 
         public async Task<List<EventSummaryDto>> GetAllUserEventsAsync(AppUser user, EventQueryObject query)
         {
-            var userEvents = _context.Events.Where(e => e.AppUserId == user.Id).AsQueryable();
+            var userEvents = _context.EventCollaborators.Where(e => e.UserId == user.Id).AsQueryable().Select(e=>e.Event);
 
             if (!string.IsNullOrWhiteSpace(query.Name))
             {
@@ -186,6 +200,13 @@ namespace EventApi.Repository
                     System.IO.File.Delete(zipPath);
                 }
             }
+
+            var removeCollaborators = await _context.EventCollaborators.Where(e => e.EventId == eventModel.Id).ToListAsync();
+
+            if (removeCollaborators.Any())
+            {                
+                _context.EventCollaborators.RemoveRange(removeCollaborators);
+            }
             _context.Events.Remove(eventModel);
 
             await _context.SaveChangesAsync();
@@ -212,8 +233,8 @@ namespace EventApi.Repository
         {
             var attendee = await _context.Attendees
             .FirstOrDefaultAsync(e => e.EventId == eventId &&
-                                e.Email == eventCheckInRequestDto.email &&
-                                e.Event.AppUserId == userId);
+                                e.Email == eventCheckInRequestDto.email
+                                );
 
 
             if (attendee == null) return new EventCheckInResultDto
@@ -250,7 +271,7 @@ namespace EventApi.Repository
         public async Task<int?> GetCurrentCheckedInCountAsync(int eventId, string userId)
         {
             var eventExists = await _context.Events
-                .AnyAsync(e => e.Id == eventId && e.AppUserId == userId);
+                .AnyAsync(e => e.Id == eventId);
 
             if (!eventExists)
             {
@@ -266,13 +287,6 @@ namespace EventApi.Repository
         , AppUser user
         , int eventId)
         {
-            var userRoleForEvent = await _context.EventCollaborators.FirstOrDefaultAsync(e => e.UserId == user.Id && e.EventId == eventId);
-
-
-            if (userRoleForEvent == null || userRoleForEvent.Role != Role.Owner)
-            {
-                throw new UnauthorizedAccessException("You do not have permission to add collaborators to this event.");
-            }
 
             List<string> collaboratorsEmails = addCollaboratorsDto.Select(e => e.Email.ToUpperInvariant()).Distinct().ToList();
 
@@ -285,8 +299,8 @@ namespace EventApi.Repository
             .Select(ec => ec.AppUser.Email.ToUpperInvariant()).ToListAsync();
 
             var pendingInvitationEmails = await _context.CollaboratorsInvitations
-            .Where(e => existingCollaboratorEmails.Contains(e.InvitedEmail) && e.EventId == eventId)
-            .Select(e=> e.InvitedEmail.ToUpperInvariant()).ToListAsync();
+            .Where(e => collaboratorsEmails.Contains(e.InvitedEmail) && e.EventId == eventId)
+            .Select(e => e.InvitedEmail.ToUpperInvariant()).ToListAsync();
 
             var emailsToProcess = collaboratorsEmails.Except(existingCollaboratorEmails)
             .Except(pendingInvitationEmails).ToList();
@@ -303,7 +317,7 @@ namespace EventApi.Repository
                 , (dto, user) => new EventCollaborators
                 {
                     UserId = user.Id,
-                    Role = Enum.Parse<Role>(dto.Role, true),
+                    Role = EnumUtils.ParseEnumMember<Role>(dto.Role),
                     EventId = eventId
                 });
             await _context.EventCollaborators.AddRangeAsync(collaboratorsToAdd);
@@ -316,7 +330,7 @@ namespace EventApi.Repository
                     {
                         InvitedEmail = user,
                         Status = Status.Pending,
-                        Role = Enum.Parse<Role>(dto.Role, true),
+                        Role = EnumUtils.ParseEnumMember<Role>(dto.Role),
                         EventId = eventId,
                         InvitationToken = Guid.NewGuid().ToString()
                     });
@@ -329,6 +343,81 @@ namespace EventApi.Repository
 
             await _context.SaveChangesAsync();
             return;
+        }
+
+        public async Task<List<GetCollaboratorsResponseDto>> GetCollaboratorsAsync(int eventId, string userId)
+        {
+            var collaborators = await _context.EventCollaborators.Where(e => e.EventId == eventId).ToListAsync();
+
+            var collaboratorsUsersId =  collaborators
+            .Where(e => e.EventId == eventId).Select(e => e.UserId).ToList();
+            var appUserInfo = await _userManager.Users.Where(u => collaboratorsUsersId.Contains(u.Id)).ToListAsync();
+
+            var GetCollaboratorsResponseDto = appUserInfo
+            .Join(collaborators, user => user.Id, coll => coll.UserId, (user, coll) =>
+            new GetCollaboratorsResponseDto
+            {
+                Email = user.Email,
+                Role = coll.Role.GetEnumMemberValue(),
+                DisplayName = user.DisplayName ?? user.Email,
+                PictureUrl = user.PictureUrl
+            }).ToList();
+            
+
+            return GetCollaboratorsResponseDto;
+        }
+
+        public async Task CheckPermissionAsync(AppUser appUser, int eventId, Actions action)
+        {
+            _logger.LogInformation("--- PERMISSION CHECK START ---");
+            _logger.LogInformation("Checking permission for AppUser ID: {UserId}, Event ID: {EventId}, Action: {Action}", appUser.Id, eventId, action);
+
+            List<Actions> editorNotPermitedActions = new List<Actions>()
+            {
+                Actions.AddCollaborators,
+                Actions.EventDelete,
+            };
+            List<Actions> checkInStaffNotPermitedActions = new List<Actions>()
+            {
+                Actions.AddCollaborators,
+                Actions.EventDelete,
+                Actions.EventDownloadZip,
+                Actions.EventEdit,
+                Actions.GetCollaborators,
+                Actions.EventGetById,
+            };
+
+            var usersRole = await _context.EventCollaborators
+            .FirstOrDefaultAsync(e => e.EventId == eventId && e.UserId == appUser.Id);
+
+            if (usersRole == null)
+            {
+                _logger.LogWarning("PERMISSION CHECK FAILED: No EventCollaborators entry found for AppUser ID: {UserId} and Event ID: {EventId}. Throwing UnauthorizedAccessException.", appUser.Id, eventId);
+                throw new UnauthorizedAccessException($"You are not a collaborator on this event and have no permissions");
+            }
+             _logger.LogInformation("PERMISSION CHECK SUCCESS: Found role '{Role}' for user.", usersRole.Role);
+
+            switch (usersRole.Role)
+            {
+                case Role.Owner:
+                    return;
+
+                case Role.Editor:
+                    if (editorNotPermitedActions.Contains(action))
+                    {
+                        throw new UnauthorizedAccessException($"As an editor You do not have permission to perform the action: {action}");
+                    }
+                    break;
+
+                case Role.CheckInStaff:
+                    if (checkInStaffNotPermitedActions.Contains(action))
+                    {
+                        throw new UnauthorizedAccessException($"As a Check-In staff You do not have permission to perform the action: {action}");
+                    }
+                    break;
+                default:
+                    throw new UnauthorizedAccessException($"Your role does not grant You permission to perform the action: {action}");
+            }
         }
     }
 }

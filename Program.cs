@@ -98,7 +98,8 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = "https://securetoken.google.com/qrplatform-1d636",
         ValidateAudience = true,
         ValidAudience = "qrplatform-1d636",
-        ValidateLifetime = true
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromMinutes(5)
     };
 });
 

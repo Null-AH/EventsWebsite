@@ -7,6 +7,7 @@ using EventApi.Controllers;
 using EventApi.DTO.Event;
 using EventApi.DTO.Internal;
 using EventApi.DTO.Query;
+using EventApi.Helpers;
 using EventApi.Models;
 
 namespace EventApi.Interfaces
@@ -22,6 +23,8 @@ namespace EventApi.Interfaces
         public Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto);
         public Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto);
         public Task<int?> GetCurrentCheckedInCountAsync(int eventId, string userId);
-        public Task AddCollaboratorsAsync(List<AddCollaboratorsRequestDto> addCollaboratorsDto, AppUser user,int eventId);
+        public Task AddCollaboratorsAsync(List<AddCollaboratorsRequestDto> addCollaboratorsDto, AppUser user, int eventId);
+        public Task<List<GetCollaboratorsResponseDto>> GetCollaboratorsAsync(int eventId, string userId);
+        public Task CheckPermissionAsync(AppUser appUser, int eventId, Actions action);
     }
 }

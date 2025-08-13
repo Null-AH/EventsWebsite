@@ -26,7 +26,7 @@ namespace EventApi.DTO.Event
         [JsonPropertyName("eventName")]
         public string Name { get; set; } = string.Empty;
         [Required]
-         [NotDefault(ErrorMessage = "Date is required.")]
+        [NotDefault(ErrorMessage = "Date is required.")]
         [JsonPropertyName("date")]
         public DateOnly EventDate { get; set; }
     }
