@@ -14,7 +14,9 @@ namespace EventApi.Models
 [JsonConverter(typeof(JsonStringEnumMemberConverter<Role>))]
     public enum Role
     {
+        [EnumMember(Value = "Owner")]
         Owner,
+        [EnumMember(Value = "Editor")]
         Editor,
         [EnumMember(Value = "Check-In Staff")]
         CheckInStaff

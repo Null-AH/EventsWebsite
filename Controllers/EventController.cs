@@ -255,7 +255,7 @@ namespace EventApi.Controllers
 
             await _eventRepo.CheckPermissionAsync(user, id, Actions.EventGetById);
 
-            var eventDetails = await _eventRepo.GetEventDetailsByIdAsync(id);
+            var eventDetails = await _eventRepo.GetEventDetailsByIdAsync(id, user);
 
             if (eventDetails == null)
             {
@@ -279,8 +279,8 @@ namespace EventApi.Controllers
             if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
 
             await _eventRepo.CheckPermissionAsync(user, id, Actions.EventDownloadZip);
-            
-            var eventInfo = await _eventRepo.GetEventByIdAsync(id);            
+
+            var eventInfo = await _eventRepo.GetEventByIdAsync(id);
 
             if (eventInfo == null)
             {
@@ -311,9 +311,9 @@ namespace EventApi.Controllers
             if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
 
             await _eventRepo.CheckPermissionAsync(user, updateEventRequestDto.Id, Actions.EventEdit);
-            
+
             if (!ModelState.IsValid) return BadRequest(ModelState);
-            var editedEvent = await _eventRepo.UpdateEvent(updateEventRequestDto.Id, updateEventRequestDto);
+            var editedEvent = await _eventRepo.UpdateEvent(updateEventRequestDto.Id, updateEventRequestDto, user);
             if (editedEvent == null)
             {
                 return NotFound("Event Do not exist");
@@ -338,7 +338,7 @@ namespace EventApi.Controllers
             if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
 
             await _eventRepo.CheckPermissionAsync(user, id, Actions.EventDelete);
-            
+
             var deletedEvent = await _eventRepo.DeleteEventByIdAsync(id);
             if (deletedEvent == null)
             {
@@ -393,7 +393,7 @@ namespace EventApi.Controllers
         [Authorize]
         public async Task<IActionResult> GetCount(int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized();
+            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value; if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized();
             var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
             if (user == null) return Unauthorized();
 
@@ -427,6 +427,23 @@ namespace EventApi.Controllers
             return Ok("Almost Done!");
         }
 
+        [HttpPut("{id:int}/editteam")]
+        [Authorize]
+
+        public async Task<IActionResult> EditCollaborators([FromBody] List<EditCollaboratorRequestDto> editCollaboratorsDto, int id)
+        {
+            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
+            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+
+            await _eventRepo.CheckPermissionAsync(user, id, Actions.EditCollaborators);
+
+            var editedCollaborator = await _eventRepo.EditCollaboratorsAsync(editCollaboratorsDto, user, id);
+
+            return Ok(editedCollaborator);
+        }
+
         [HttpGet("{id:int}/getteam")]
         [Authorize]
         public async Task<IActionResult> GetCollaborators(int id)
@@ -441,6 +458,47 @@ namespace EventApi.Controllers
             var collaboratorsResponseDto = await _eventRepo.GetCollaboratorsAsync(id, user.Id);
 
             return Ok(collaboratorsResponseDto);
+        }
+
+        [HttpPost("{id:int}/deleteteam")]
+        [Authorize]
+        public async Task<IActionResult> DeleteCollaborators([FromRoute] int id, [FromBody] List<string> userToDeleteId)
+        {
+            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
+            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+
+            await _eventRepo.CheckPermissionAsync(user, id, Actions.DeleteCollaborators);
+
+            var success = await _eventRepo.DeleteCollaboratorsAsync(id, user, userToDeleteId);
+
+            if (!success)
+            {
+                return BadRequest("Collaborator could not be removed, They might be the event owner or do not exist");
+            }
+
+            return NoContent();
+        }
+
+        [HttpPost("{id:int}/leave")]
+        [Authorize]
+        public async Task<IActionResult> LeaveEvent([FromRoute] int id, [FromBody] string userId)
+        {
+            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
+            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+
+            await _eventRepo.CheckPermissionAsync(user, id, Actions.DeleteCollaborators);
+            bool success = await _eventRepo.LeaveEventAsync(id, user);
+
+            if (!success)
+            {
+                return BadRequest("Collaborator could not be removed, They might be the event owner or do not exist");
+            }
+
+            return NoContent();
         }
 
         

@@ -22,6 +22,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using EventApi.Services;
 using EventApi.Helpers;
+using MathNet.Numerics;
+using Microsoft.Identity.Client;
+using Microsoft.AspNetCore.Http.HttpResults;
+using EventApi.Migrations;
+using System.Xml;
 
 namespace EventApi.Repository
 {
@@ -96,37 +101,41 @@ namespace EventApi.Repository
 
         public async Task<List<EventSummaryDto>> GetAllUserEventsAsync(AppUser user, EventQueryObject query)
         {
-            var userEvents = _context.EventCollaborators.Where(e => e.UserId == user.Id).AsQueryable().Select(e=>e.Event);
+            var userEvents = _context.EventCollaborators.Include(e => e.Event).ThenInclude(e => e.Attendees)
+            .Where(e => e.UserId == user.Id);
 
             if (!string.IsNullOrWhiteSpace(query.Name))
             {
-                userEvents = userEvents.Where(e => e.Name.Contains(query.Name));
+                userEvents = userEvents.Where(e => e.Event.Name.Contains(query.Name));
             }
 
-            var sortExpresions = new Dictionary<string, Expression<Func<Event, object>>>
+            var sortExpresions = new Dictionary<string, Expression<Func<EventCollaborators, object>>>
             {
-                {"name",e => e.Name},
-                {"eventdate",e => e.EventDate}
+                {"name",e => e.Event.Name},
+                {"eventdate",e => e.Event.EventDate}
             };
 
-            var selectedSortExpression = sortExpresions.GetValueOrDefault(query.OrderBy.ToLower(), e => e.EventDate);
+            var selectedSortExpression = sortExpresions.GetValueOrDefault(query.OrderBy.ToLower(), e => e.Event.EventDate);
 
             if (!string.IsNullOrWhiteSpace(query.OrderBy))
             {
-                userEvents = query.IsDescending ? userEvents.OrderByDescending(selectedSortExpression) : userEvents.OrderBy(selectedSortExpression);
+                userEvents = query.IsDescending ? userEvents.OrderByDescending(selectedSortExpression) 
+                : userEvents.OrderBy(selectedSortExpression);
             }
 
             var skipNumber = (query.PageNumber - 1) * query.PageSize;
 
             return await userEvents
                 .Skip(skipNumber).Take(query.PageSize)
-                .Select(u => u.EventToSummaryDto(u.Attendees.Count()))
+                .Select(u => u.EventToSummaryDto(u.Event.Attendees.Count()))
                 .ToListAsync();
         }
 
-        public async Task<EventDetailsDto> GetEventDetailsByIdAsync(int id)
+        public async Task<EventDetailsDto> GetEventDetailsByIdAsync(int id,AppUser user)
         {
-            var eventModel = await _context.Events.Include(e => e.Attendees).Include(e => e.TemplateElements).FirstOrDefaultAsync(e => e.Id == id);
+            var eventModel = await _context.EventCollaborators
+            .Include(e => e.Event).ThenInclude(e => e.Attendees).Include(e => e.Event.TemplateElements).AsSplitQuery()
+            .FirstOrDefaultAsync(e => e.EventId == id && e.UserId == user.Id);
 
             if (eventModel == null)
             {
@@ -213,20 +222,20 @@ namespace EventApi.Repository
             return eventModel;
         }
 
-        public async Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto)
+        public async Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto,AppUser appUser)
         {
-            var eventModel = await _context.Events.Include(e => e.Attendees).FirstOrDefaultAsync(e => e.Id == id);
+            var eventModel = await _context.EventCollaborators.Include(e => e.Event.Attendees).FirstOrDefaultAsync(e => e.EventId == id && e.UserId == appUser.Id);
             if (eventModel == null)
             {
                 return null;
             }
 
-            eventModel.Name = updateEventRequestDto.Name;
-            eventModel.EventDate = updateEventRequestDto.EventDate;
+            eventModel.Event.Name = updateEventRequestDto.Name;
+            eventModel.Event.EventDate = updateEventRequestDto.EventDate;
 
             await _context.SaveChangesAsync();
 
-            return eventModel.EventToSummaryDto(eventModel.Attendees.Count());
+            return eventModel.EventToSummaryDto(eventModel.Event.Attendees.Count());
         }
 
         public async Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto)
@@ -357,6 +366,7 @@ namespace EventApi.Repository
             .Join(collaborators, user => user.Id, coll => coll.UserId, (user, coll) =>
             new GetCollaboratorsResponseDto
             {
+                UserId = user.Id,
                 Email = user.Email,
                 Role = coll.Role.GetEnumMemberValue(),
                 DisplayName = user.DisplayName ?? user.Email,
@@ -367,6 +377,134 @@ namespace EventApi.Repository
             return GetCollaboratorsResponseDto;
         }
 
+        public async Task<bool> DeleteCollaboratorsAsync(int eventId, AppUser appUser, List<string> collaboratorsToDeleteId)
+        {
+            var collaboratorsToDelete = await _context.EventCollaborators.Include(e => e.Event)
+            .Where(e => e.EventId == eventId && collaboratorsToDeleteId.Contains(e.UserId)).ToListAsync();
+           
+            if (!collaboratorsToDelete.Any())
+            {
+                return false;
+            }
+
+            var collaboratorsRoles = collaboratorsToDelete.Select(e => e.Role).ToList();
+
+            var ownerCount = await _context.EventCollaborators.CountAsync(ec => ec.EventId == eventId && ec.Role == Role.Owner);
+            var creatorUserId = collaboratorsToDelete.First().Event.AppUserId;
+
+            bool isCreatorPresent = await _context.EventCollaborators.AnyAsync(ec => ec.EventId == eventId && ec.Event.AppUserId == creatorUserId);
+
+            foreach (var collaborator in collaboratorsToDelete)
+            {
+                if (collaborator.Role == Role.Owner)
+                {
+                    if (ownerCount <= collaboratorsToDelete.Count(c => c.Role == Role.Owner))
+                    {
+                        throw new InvalidOperationException("You cannot remove all owners of an event. Please leave at least one.");
+                    }
+
+                    bool isCurrentUserTheCreator = (creatorUserId == appUser.Id);
+                    if (isCreatorPresent)
+                    {
+                        if (!isCurrentUserTheCreator)
+                        {
+                            throw new UnauthorizedAccessException("Only the event creator can remove another owner while they are still a collaborator.");
+                        }
+                    }
+                }
+            }
+
+            _context.EventCollaborators.RemoveRange(collaboratorsToDelete);
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        public async Task<List<EditCollaboratorRequestDto>> EditCollaboratorsAsync(List<EditCollaboratorRequestDto> editCollaboratorsRequestDto, AppUser user, int eventId)
+        {
+            var collaboratorsToEditIds = editCollaboratorsRequestDto.Select(e => e.UserId);
+
+            var collaboratorsToEdit = await _context.EventCollaborators.Include(e => e.Event)
+            .Where(e => e.EventId == eventId && collaboratorsToEditIds.Contains(e.UserId)).ToListAsync();
+
+            var collaboratorsToEditRoles = collaboratorsToEdit.Select(e => e.Role).ToList();
+
+            var newRoles = editCollaboratorsRequestDto.Select(e => EnumUtils.ParseEnumMember<Role>(e.Role)).ToList();
+
+            if (!collaboratorsToEdit.Any())
+            {
+                var foundIds = collaboratorsToEdit.Select(c => c.UserId);
+                var notFoundIds = collaboratorsToEditIds.Except(foundIds);
+                // This gives a super helpful error message like "Collaborators not found: [guid1, guid2]"
+                throw new KeyNotFoundException($"Collaborators not found for the following IDs: {string.Join(", ", notFoundIds)}");
+            }
+            
+            var ownerCount = await _context.EventCollaborators.CountAsync(ec => ec.EventId == eventId && ec.Role == Role.Owner);
+
+            var creatorUserId = collaboratorsToEdit.First().Event.AppUserId;
+            bool isCreatorPresent = await _context.EventCollaborators.AnyAsync(ec => ec.EventId == eventId && ec.Event.AppUserId == creatorUserId);
+
+            
+            foreach (var collaborator in collaboratorsToEdit)
+            {
+                var dto = editCollaboratorsRequestDto.First(d => d.UserId == collaborator.UserId);
+                var newRole = EnumUtils.ParseEnumMember<Role>(dto.Role);
+
+                bool isSelfDemotion = (collaborator.UserId == user.Id);
+                bool isCurrentUserTheCreator = (creatorUserId == user.Id);
+
+                if (ownerCount <= 1 && newRole != Role.Owner && collaborator.Role == Role.Owner)
+                {
+                    throw new InvalidOperationException("Cannot remove or downgrade the last owner of an event. Please assign a new owner first.");
+                }
+
+                if (isCreatorPresent)
+                {
+                    if (!isSelfDemotion && !isCurrentUserTheCreator && collaborator.Role == Role.Owner)
+                    {
+                        throw new UnauthorizedAccessException("Only the event creator can demote another owner.");
+                    }
+                }
+
+                collaborator.Role = newRole;
+            }
+
+            await _context.SaveChangesAsync();
+
+            var editedCollaborators = collaboratorsToEdit.Select(c => new EditCollaboratorRequestDto
+            {
+                UserId = c.UserId,
+                Role = c.Role.GetEnumMemberValue(),
+                Email = editCollaboratorsRequestDto.Find(e => e.UserId == c.UserId).Email
+            }).ToList();
+            
+            return editedCollaborators;
+        }
+
+        public async Task<bool> LeaveEventAsync(int eventId, AppUser user)
+        {
+            var collaboratorToLeave = await _context.EventCollaborators
+            .FirstOrDefaultAsync(e => e.EventId == eventId && e.UserId == user.Id);
+           
+            if (collaboratorToLeave == null)
+            {
+                return false;
+            }
+
+            var ownerCount = await _context.EventCollaborators.CountAsync(ec => ec.EventId == eventId && ec.Role == Role.Owner);            
+
+            if (ownerCount <= 1 && collaboratorToLeave.Role == Role.Owner)
+            {
+                throw new InvalidOperationException("You are the Only owner for this event. Please assign a new owner first or just delete it.");
+            }
+
+            _context.EventCollaborators.Remove(collaboratorToLeave);
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+
+
         public async Task CheckPermissionAsync(AppUser appUser, int eventId, Actions action)
         {
             _logger.LogInformation("--- PERMISSION CHECK START ---");
@@ -375,16 +513,20 @@ namespace EventApi.Repository
             List<Actions> editorNotPermitedActions = new List<Actions>()
             {
                 Actions.AddCollaborators,
+                Actions.DeleteCollaborators,
                 Actions.EventDelete,
+                Actions.EditCollaborators
             };
             List<Actions> checkInStaffNotPermitedActions = new List<Actions>()
             {
-                Actions.AddCollaborators,
-                Actions.EventDelete,
+                Actions.EventGetById,
                 Actions.EventDownloadZip,
                 Actions.EventEdit,
+                Actions.EventDelete,
                 Actions.GetCollaborators,
-                Actions.EventGetById,
+                Actions.AddCollaborators,
+                Actions.EditCollaborators,
+                Actions.DeleteCollaborators
             };
 
             var usersRole = await _context.EventCollaborators
@@ -395,7 +537,7 @@ namespace EventApi.Repository
                 _logger.LogWarning("PERMISSION CHECK FAILED: No EventCollaborators entry found for AppUser ID: {UserId} and Event ID: {EventId}. Throwing UnauthorizedAccessException.", appUser.Id, eventId);
                 throw new UnauthorizedAccessException($"You are not a collaborator on this event and have no permissions");
             }
-             _logger.LogInformation("PERMISSION CHECK SUCCESS: Found role '{Role}' for user.", usersRole.Role);
+            _logger.LogInformation("PERMISSION CHECK SUCCESS: Found role '{Role}' for user.", usersRole.Role);
 
             switch (usersRole.Role)
             {

@@ -5,8 +5,10 @@ using System.Threading.Tasks;
 using EventApi.DTO.Event;
 using EventApi.Migrations;
 using EventApi.Models;
+using EventApi.Services;
 using Humanizer.DateTimeHumanizeStrategy;
 using NPOI.SS.Formula.Functions;
+using EventApi.Helpers;
 
 namespace EventApi.Mappers
 {
@@ -24,29 +26,31 @@ namespace EventApi.Mappers
             };
         }
 
-        public static EventSummaryDto EventToSummaryDto(this Event eventModel, int attendeesCount)
+        public static EventSummaryDto EventToSummaryDto(this EventCollaborators eventCollabModel, int attendeesCount)
         {
             return new EventSummaryDto
             {
-                Id = eventModel.Id,
-                Name = eventModel.Name,
-                EventDate = eventModel.EventDate,
+                Id = eventCollabModel.Event.Id,
+                Name = eventCollabModel.Event.Name,
+                EventDate = eventCollabModel.Event.EventDate,
                 AttendeeCount = attendeesCount,
-                BackgroundImageUri = eventModel.BackgroundImageUri
+                BackgroundImageUri = eventCollabModel.Event.BackgroundImageUri,
+                Role = eventCollabModel.Role.GetEnumMemberValue()
             };
         }
-        public static EventDetailsDto EventToEventDetailsDto(this Event eventModel)
+        public static EventDetailsDto EventToEventDetailsDto(this EventCollaborators eventModel)
         {
             return new EventDetailsDto
             {
-                Id = eventModel.Id,
-                Name = eventModel.Name,
-                BackgroundImageUri = eventModel.BackgroundImageUri,
-                EventDate = eventModel.EventDate,
-                Location = eventModel.Location,
-                Attendees = eventModel.Attendees.AttendeeToDto(),
-                TemplateElements = eventModel.TemplateElements.TemplateElementsToDto(),
-                GeneratedInvitationFullPath = eventModel.GeneratedInvitationsZipUri
+                Id = eventModel.Event.Id,
+                Name = eventModel.Event.Name,
+                BackgroundImageUri = eventModel.Event.BackgroundImageUri,
+                EventDate = eventModel.Event.EventDate,
+                Location = eventModel.Event.Location,
+                Attendees = eventModel.Event.Attendees.AttendeeToDto(),
+                TemplateElements = eventModel.Event.TemplateElements.TemplateElementsToDto(),
+                GeneratedInvitationFullPath = eventModel.Event.GeneratedInvitationsZipUri,
+                Role = eventModel.Role.GetEnumMemberValue()
             };
         }
 

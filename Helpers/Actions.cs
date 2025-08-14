@@ -11,6 +11,8 @@ namespace EventApi.Helpers
         EventDownloadZip,
         AddCollaborators,
         GetCollaborators,
+        DeleteCollaborators,
+        EditCollaborators,
         CheckIn,
         Count
     }

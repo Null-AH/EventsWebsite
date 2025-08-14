@@ -10,7 +10,7 @@ namespace EventApi.DTO.Event
 {
     public class EventDetailsDto
     {
-        public int Id { get; set; } 
+        public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public DateOnly EventDate { get; set; }
         public string? Location { get; set; }
@@ -18,5 +18,6 @@ namespace EventApi.DTO.Event
         public string? GeneratedInvitationFullPath { get; set; }
         public List<AttendeeDto> Attendees { get; set; } = new List<AttendeeDto>();
         public List<TemplateElementsDto> TemplateElements { get; set; } = new List<TemplateElementsDto>();
+        public string Role { get; set; }
     }
 }

@@ -16,15 +16,23 @@ namespace EventApi.Interfaces
     {
         public Task<Event> CreateNewEventAsync(NewEventInfo eventInfo);
         public Task<List<EventSummaryDto>> GetAllUserEventsAsync(AppUser user, EventQueryObject query);
-        public Task<EventDetailsDto> GetEventDetailsByIdAsync(int id);
+        public Task<EventDetailsDto> GetEventDetailsByIdAsync(int id, AppUser user);
         public Task<Event> GetEventByIdAsync(int id);
         public Task<bool> EventExistsAsync(string userId, CreateEventDto eventInfoToCheck);
         public Task<Event> DeleteEventByIdAsync(int id);
-        public Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto);
+        public Task<EventSummaryDto> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto, AppUser appUser);
+
         public Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto);
         public Task<int?> GetCurrentCheckedInCountAsync(int eventId, string userId);
+
         public Task AddCollaboratorsAsync(List<AddCollaboratorsRequestDto> addCollaboratorsDto, AppUser user, int eventId);
         public Task<List<GetCollaboratorsResponseDto>> GetCollaboratorsAsync(int eventId, string userId);
+        public Task<List<EditCollaboratorRequestDto>> EditCollaboratorsAsync(List<EditCollaboratorRequestDto> editCollaboratorRequestDto, AppUser user, int eventId);
+        public Task<bool> DeleteCollaboratorsAsync(int eventId, AppUser appUser, List<string> collaboratorsToDeleteId);
+
+        public Task<bool> LeaveEventAsync(int eventId, AppUser user);
+
         public Task CheckPermissionAsync(AppUser appUser, int eventId, Actions action);
+        
     }
 }

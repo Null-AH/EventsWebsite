@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
+using EventApi.Models;
 
 namespace EventApi.DTO.Event
 {
@@ -13,6 +14,7 @@ namespace EventApi.DTO.Event
         public DateOnly EventDate { get; set; }
         public int AttendeeCount { get; set; }
         public string? BackgroundImageUri { get; set; } = string.Empty;
+        public string? Role { get; set; }
 
     }
 }
