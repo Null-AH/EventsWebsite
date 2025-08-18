@@ -11,9 +11,9 @@ namespace EventApi.DTO.Internal
     public class NewEventInfo
     {
         public CreateEventDto EventDetails { get; set; }
-        public List<TemplateElementsDto> TemplateElements { get; set; }
+        public List<TemplateElementsDto>? TemplateElements { get; set; }
         public IFormFile AttendeeFile { get; set; }
-        public IFormFile BackgroundImage { get; set; }
+        public IFormFile? BackgroundImage { get; set; }
         public AppUser CreatingUser { get; set; } // We also need to know who is making the event
     }
 }

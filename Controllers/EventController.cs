@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Text.Json;
 using System.Threading.Tasks;
 using EventApi.DTO.Event;
 using EventApi.DTO.Internal;
 using EventApi.DTO.Query;
 using EventApi.DTO.Template;
+using EventApi.ExeptionHandling;
+using EventApi.Filters;
 using EventApi.Helpers;
 using EventApi.Interfaces;
 using EventApi.Models;
@@ -24,7 +27,7 @@ namespace EventApi.Controllers
 {
     [Route("api/event")]
     [ApiController]
-    public class EventController : ControllerBase
+    public class EventController : BaseApiController
     {
         private readonly UserManager<AppUser> _userManager;
         private readonly IEventRepository _eventRepo;
@@ -42,47 +45,18 @@ namespace EventApi.Controllers
 
         [HttpPost("create-free")]
         [Authorize]
-        public async Task<IActionResult> CreateFree([FromForm] string eventInfo, IFormFile attendeeFile)
+        [LoadUser]
+        [SubscriptionCheck(Actions.CreateFree)]
+        public async Task<IActionResult> CreateFree([FromForm]CreateEventRequestDto createEventRequestDto)
         {
             var serializerOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             };
 
-            CreateEventDto? createEventDto = JsonSerializer.Deserialize<CreateEventDto>(eventInfo);
-            if (createEventDto == null || string.IsNullOrWhiteSpace(createEventDto.Name))
-            {
-                return BadRequest("Event name is missing or invalid.");
-            }
-            if (attendeeFile == null || attendeeFile.Length == 0)
-                return BadRequest("Attendee file required");
+            var createEventDto = JsonSerializer.Deserialize<CreateEventDto>(createEventRequestDto.EventInfo);
+            var user = HttpContext.Items["AppUser"] as AppUser;
 
-            var allowedFileTypes = new[]
-            {
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-                "text/csv" // .csv
-            };
-            if (!allowedFileTypes.Contains(attendeeFile.ContentType))
-            {
-                // 3. Return a more helpful error message
-                return BadRequest("Invalid file type. Please upload an XLSX or CSV file.");
-            }
-
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-
-            if (string.IsNullOrEmpty(firebaseUid))
-            {
-                return Unauthorized("Invalid token: Firebase UID is missing.");
-            }
-
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-
-            if (user == null)
-            {
-                _logger.LogError("PERMISSION CHECK PRE-FAILURE: Could not find user in DB with Firebase UID: {FirebaseUid}. Returning 401.", firebaseUid);
-                return Unauthorized("User profile does not exist. Please sync first.");
-            }
-            _logger.LogInformation("PERMISSION CHECK PRE-STEP: Found user with AppUser ID: {UserId}. Now checking permission in repository.", user.Id);
             // if (await _eventRepo.EventExistsAsync(user.Id, createEventDto))
             // {
             //     return Conflict("An event with this name and date has already been created.");
@@ -92,23 +66,30 @@ namespace EventApi.Controllers
             {
                 EventDetails = createEventDto,
                 TemplateElements = null,
-                AttendeeFile = attendeeFile,
+                AttendeeFile = createEventRequestDto.AttendeeFile,
                 BackgroundImage = null,
                 CreatingUser = user
             };
 
-            var createdEvent = await _eventRepo.CreateNewEventAsync(newEventInfo);
+            var createdEventResult = await _eventRepo.CreateNewEventAsync(newEventInfo);
 
-            if (createdEvent == null)
-                return StatusCode(500, "An error occurred while creating the event.");
+            if (createdEventResult.IsSuccess)
+            {
+                return CreatedAtAction
+                (nameof(GetById), new { id = createdEventResult.Value.Id },
+                 createdEventResult.Value);
+            }
 
-            return Ok();
+            return HandleResult(createdEventResult);
+
         }
 
 
         [HttpPost("create")]
         [Authorize]
-        public async Task<IActionResult> Create([FromForm] string eventInfo, [FromForm] string templateInfo, IFormFile attendeeFile, IFormFile backgroundImage)
+        [LoadUser]
+        [SubscriptionCheck(Actions.CreatePro)]
+        public async Task<IActionResult> Create([FromForm] CreateEventRequestDto eventRequestDto)
         {
 
             var serializerOptions = new JsonSerializerOptions
@@ -116,61 +97,15 @@ namespace EventApi.Controllers
                 PropertyNameCaseInsensitive = true
             };
 
-            CreateEventDto? createEventDto = JsonSerializer.Deserialize<CreateEventDto>(eventInfo);
-            List<TemplateElementsDto>? templateElementsDto = JsonSerializer.Deserialize<List<TemplateElementsDto>>(templateInfo);
+            var createEventDto = JsonSerializer
+            .Deserialize<CreateEventDto>(eventRequestDto.EventInfo,serializerOptions);
 
-            if (createEventDto == null || string.IsNullOrWhiteSpace(createEventDto.Name))
-            {
-                return BadRequest("Event name is missing or invalid.");
-            }
-            if (templateElementsDto == null || !templateElementsDto.Any())
-            {
-                return BadRequest("Template elements are required.");
-            }
-            if (templateElementsDto.Any(t => string.IsNullOrWhiteSpace(t.ElementType)))
-            {
-                return BadRequest("One or more template elements has a missing or invalid type.");
-            }
+            var templateElementsDto = JsonSerializer
+            .Deserialize<List<TemplateElementsDto>>(eventRequestDto.TemplateInfo,serializerOptions);
 
+            var user = HttpContext.Items["AppUser"] as AppUser;
 
-            if (backgroundImage == null || backgroundImage.Length == 0)
-                return BadRequest("Background image is required.");
-
-            var allowedImageTypes = new[] { "image/jpeg", "image/png" };
-
-            if (!allowedImageTypes.Contains(backgroundImage.ContentType))
-                return BadRequest("Invalid image file type. Please upload a JPG or PNG.");
-
-            if (attendeeFile == null || attendeeFile.Length == 0)
-                return BadRequest("Attendee file required");
-
-
-            var allowedFileTypes = new[]
-                {
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-                    "text/csv" // .csv
-                };
-
-            // 2. Check if the file's type is NOT in our allowed list
-            if (!allowedFileTypes.Contains(attendeeFile.ContentType))
-            {
-                // 3. Return a more helpful error message
-                return BadRequest("Invalid file type. Please upload an XLSX or CSV file.");
-            }
-
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid))
-            {
-                return Unauthorized("Invalid token: Firebase UID is missing.");
-            }
-
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-
-            if (user == null)
-            {
-                return Unauthorized("User profile does not exist. Please sync first.");
-            }
-
+            
             // if (await _eventRepo.EventExistsAsync(user.Id, createEventDto))
             // {
             //     return Conflict("An event with this name and date has already been created.");
@@ -180,92 +115,73 @@ namespace EventApi.Controllers
             {
                 EventDetails = createEventDto,
                 TemplateElements = templateElementsDto,
-                AttendeeFile = attendeeFile,
-                BackgroundImage = backgroundImage,
+                AttendeeFile = eventRequestDto.AttendeeFile,
+                BackgroundImage = eventRequestDto.BackgroundImage,
                 CreatingUser = user
             };
 
-            try
+
+            var createdEventResult = await _eventRepo.CreateNewEventAsync(newEventInfo);
+
+            if (createdEventResult.IsSuccess)
             {
+                _backgroundJob.Enqueue<IImageGenerationService>(service => service
+                .GenerateInvitationsForEventAsync(createdEventResult.Value.Id));
 
-                var createdEvent = await _eventRepo.CreateNewEventAsync(newEventInfo);
-
-                if (createdEvent == null)
-                    return StatusCode(500, "An error occurred while creating the event.");
-
-                _backgroundJob.Enqueue<IImageGenerationService>(service => service.GenerateInvitationsForEventAsync(createdEvent.Id));
-
-                //var zipFilePath = await _imageGen.GenerateInvitationsForEventAsync(createdEvent.Id);
-                //var fileBytes = await System.IO.File.ReadAllBytesAsync(zipFilePath);
-                //System.IO.File.Delete(zipFilePath);
-                //return File(fileBytes, "application/zip", "invitations.zip",enableRangeProcessing : true);
-
-                return AcceptedAtAction(nameof(GetById), new { id = createdEvent.Id }, createdEvent);
+                return AcceptedAtAction(nameof(GetById), new { id = createdEventResult.Value.Id }, createdEventResult.Value);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, "An unexpected internal error occurred.");
-            }
+            return HandleResult(createdEventResult);
+
+            //var zipFilePath = await _imageGen.GenerateInvitationsForEventAsync(createdEvent.Id);
+            //var fileBytes = await System.IO.File.ReadAllBytesAsync(zipFilePath);
+            //System.IO.File.Delete(zipFilePath);
+            //return File(fileBytes, "application/zip", "invitations.zip",enableRangeProcessing : true);
 
         }
 
 
         [HttpGet("all")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.EventGetAll)]
+        //[CheckEventPermission(Actions.EventGetAll)]
+
         [ProducesResponseType(typeof(IEnumerable<EventSummaryDto>), 200)]
         [ProducesResponseType(401)]
         [ProducesResponseType(404)]
         [ProducesResponseType(500)]
         public async Task<IActionResult> GetAllUserEvents([FromQuery] EventQueryObject query)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid))
-            {
-                return Unauthorized("Invalid token: Firebase UID is missing.");
-            }
+            var user = HttpContext.Items["AppUser"] as AppUser;
+            var userEventsResult = await _eventRepo.GetAllUserEventsAsync(user, query);
 
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-
-            if (user == null)
-            {
-                return Unauthorized("User profile does not exist. Please sync first.");
-            }
-
-            var userEvents = await _eventRepo.GetAllUserEventsAsync(user, query);
-
-            return Ok(userEvents);
+            return HandleResult(userEventsResult);
         }
 
         [HttpGet("{id:int}")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.EventGetById)]
+        [CheckEventPermission(Actions.EventGetById)]
+
         [ProducesResponseType(500)]
         [ProducesResponseType(200)]
         [ProducesResponseType(401)]
 
         public async Task<IActionResult> GetById([FromRoute] int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
-
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.EventGetById);
+            var user = HttpContext.Items["AppUser"] as AppUser;
 
             var eventDetails = await _eventRepo.GetEventDetailsByIdAsync(id, user);
 
-            if (eventDetails == null)
-            {
-                return NotFound("Failed to Fetch Event Details");
-            }
-
-            return Ok(eventDetails);
+            return HandleResult(eventDetails);
         }
 
         [HttpGet("{id:int}/download")]
+        [LoadUser]
+        [SubscriptionCheck(Actions.EventDownloadZip)]
+        [CheckEventPermission(Actions.EventDownloadZip)]
+
         [ProducesResponseType(500)]
         [ProducesResponseType(200)]
         [ProducesResponseType(202)]
@@ -273,30 +189,29 @@ namespace EventApi.Controllers
 
         public async Task<IActionResult> GetDownloadById([FromRoute] int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+            var eventZipResult = await _eventRepo.GetEventZipByIdAsync(id);
 
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.EventDownloadZip);
-
-            var eventInfo = await _eventRepo.GetEventByIdAsync(id);
-
-            if (eventInfo == null)
+            if (!eventZipResult.IsSuccess)
             {
-                return NotFound("Event not found.");
+                return HandleResult(eventZipResult);
             }
-
-            if (string.IsNullOrEmpty(eventInfo.GeneratedInvitationsZipUri))
+            else
             {
-                return Accepted("Processing... Please Check later");
+                if (string.IsNullOrEmpty(eventZipResult.Value))
+                {
+                    return Accepted("Processing... Please Check later");
+                }
+                else
+                {
+                    return Ok(eventZipResult.Value);
+                }
             }
-
-            return Ok(eventInfo.GeneratedInvitationsZipUri);
         }
 
         [HttpPut("edit")]
         [Authorize]
+        [LoadUser]
+        [CheckEventPermission(Actions.EventEdit)]
 
         [ProducesResponseType(404)]
         [ProducesResponseType(500)]
@@ -305,25 +220,18 @@ namespace EventApi.Controllers
 
         public async Task<IActionResult> UpdateEvent([FromBody] UpdateEventRequestDto updateEventRequestDto)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
-
-            await _eventRepo.CheckPermissionAsync(user, updateEventRequestDto.Id, Actions.EventEdit);
+            var user = HttpContext.Items["AppUser"] as AppUser;
 
             if (!ModelState.IsValid) return BadRequest(ModelState);
             var editedEvent = await _eventRepo.UpdateEvent(updateEventRequestDto.Id, updateEventRequestDto, user);
-            if (editedEvent == null)
-            {
-                return NotFound("Event Do not exist");
-            }
 
-            return Ok(editedEvent);
+            return HandleResult(editedEvent);
         }
 
         [HttpDelete("delete")]
         [Authorize]
+        [LoadUser]
+        [CheckEventPermission(Actions.EventDelete)]
 
         [ProducesResponseType(404)]
         [ProducesResponseType(204)]
@@ -332,24 +240,23 @@ namespace EventApi.Controllers
 
         public async Task<IActionResult> DeleteEvent([FromQuery] int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
 
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.EventDelete);
-
-            var deletedEvent = await _eventRepo.DeleteEventByIdAsync(id);
-            if (deletedEvent == null)
+            var deletedEventResult = await _eventRepo.DeleteEventByIdAsync(id);
+            if (deletedEventResult.IsSuccess)
             {
-                return NotFound("Event Do not exist");
+                return NoContent();
             }
-            return NoContent();
+
+            return HandleResult(deletedEventResult);
         }
 
 
         [HttpPost("{id:int}/check-in")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.CheckIn)]
+        [CheckEventPermission(Actions.CheckIn)]
+
         [ProducesResponseType(404)]
         [ProducesResponseType(200)]
         [ProducesResponseType(500)]
@@ -357,21 +264,7 @@ namespace EventApi.Controllers
         [ProducesResponseType(401)]
         public async Task<IActionResult> QrCheckIn([FromRoute] int id, [FromBody] EventCheckInRequestDto checkInRequestDto)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid))
-            {
-                return Unauthorized("Invalid token: Firebase UID is missing.");
-            }
-
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-
-            if (user == null)
-            {
-                return Unauthorized("User profile does not exist. Please sync first.");
-            }
-
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.CheckIn);
-
+            var user = HttpContext.Items["AppUser"] as AppUser;
             if (checkInRequestDto == null)
                 return BadRequest("Invalid Data!");
 
@@ -389,93 +282,80 @@ namespace EventApi.Controllers
                     return StatusCode(500, "An unknown error occured during check-in");
             }
         }
+
         [HttpGet("{id:int}/count")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.Count)]
+        [CheckEventPermission(Actions.Count)]
         public async Task<IActionResult> GetCount(int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value; if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized();
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized();
+            var user = HttpContext.Items["AppUser"] as AppUser;
+            var countResult = await _eventRepo.GetCurrentCheckedInCountAsync(id, user.Id);
 
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.Count);
-
-
-            var count = await _eventRepo.GetCurrentCheckedInCountAsync(id, user.Id);
-
-            if (count == null)
+            if (!countResult.IsSuccess)
             {
-                return NotFound("Event not found or you do not have permission to view it.");
+                return HandleResult(countResult);
             }
 
-            return Ok(new { CheckedInCount = count });
+            return Ok(new { CheckedInCount = countResult.Value });
         }
 
         [HttpPost("{id:int}/addteam")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.AddCollaborators)]
+        [CheckEventPermission(Actions.AddCollaborators)]
 
         public async Task<IActionResult> AddCollaborators([FromBody] List<AddCollaboratorsRequestDto> addCollaboratorsDto, int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+            var user = HttpContext.Items["AppUser"] as AppUser;
 
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.AddCollaborators);
+            var addResult = await _eventRepo.AddCollaboratorsAsync(addCollaboratorsDto, user, id);
 
-            await _eventRepo.AddCollaboratorsAsync(addCollaboratorsDto, user, id);
-
-            return Ok("Almost Done!");
+            return HandleResult(addResult);
         }
 
         [HttpPut("{id:int}/editteam")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.EditCollaborators)]
+        [CheckEventPermission(Actions.EditCollaborators)]
 
         public async Task<IActionResult> EditCollaborators([FromBody] List<EditCollaboratorRequestDto> editCollaboratorsDto, int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+            var user = HttpContext.Items["AppUser"] as AppUser;
+            var editedCollaborator = await _eventRepo.EditCollaboratorsAsync
+            (editCollaboratorsDto, user, id);
 
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.EditCollaborators);
-
-            var editedCollaborator = await _eventRepo.EditCollaboratorsAsync(editCollaboratorsDto, user, id);
-
-            return Ok(editedCollaborator);
+            return HandleResult(editedCollaborator);
         }
 
         [HttpGet("{id:int}/getteam")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.GetCollaborators)]
+        [CheckEventPermission(Actions.GetCollaborators)]
         public async Task<IActionResult> GetCollaborators(int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
-
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.GetCollaborators);
-
+            var user = HttpContext.Items["AppUser"] as AppUser;
             var collaboratorsResponseDto = await _eventRepo.GetCollaboratorsAsync(id, user.Id);
-
-            return Ok(collaboratorsResponseDto);
+            return HandleResult(collaboratorsResponseDto);
         }
 
         [HttpPost("{id:int}/deleteteam")]
         [Authorize]
+        [LoadUser]
+        [SubscriptionCheck(Actions.DeleteCollaborators)]
+        [CheckEventPermission(Actions.DeleteCollaborators)]
         public async Task<IActionResult> DeleteCollaborators([FromRoute] int id, [FromBody] List<string> userToDeleteId)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+            var user = HttpContext.Items["AppUser"] as AppUser;
+            var deleteResult = await _eventRepo.DeleteCollaboratorsAsync(id, user, userToDeleteId);
 
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.DeleteCollaborators);
-
-            var success = await _eventRepo.DeleteCollaboratorsAsync(id, user, userToDeleteId);
-
-            if (!success)
+            if (!deleteResult.IsSuccess)
             {
-                return BadRequest("Collaborator could not be removed, They might be the event owner or do not exist");
+                return HandleResult(deleteResult);
             }
 
             return NoContent();
@@ -483,19 +363,17 @@ namespace EventApi.Controllers
 
         [HttpPost("{id:int}/leave")]
         [Authorize]
-        public async Task<IActionResult> LeaveEvent([FromRoute] int id, [FromBody] string userId)
+        [LoadUser]
+        [SubscriptionCheck(Actions.Leave)]
+        [CheckEventPermission(Actions.Leave)]
+        public async Task<IActionResult> LeaveEvent([FromRoute] int id)
         {
-            var firebaseUid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(firebaseUid)) return Unauthorized("Invalid token: Firebase UID is missing.");
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.FirebaseUid == firebaseUid);
-            if (user == null) return Unauthorized("User profile does not exist. Please sync first.");
+            var user = HttpContext.Items["AppUser"] as AppUser;
+            var leaveResult = await _eventRepo.LeaveEventAsync(id, user);
 
-            await _eventRepo.CheckPermissionAsync(user, id, Actions.DeleteCollaborators);
-            bool success = await _eventRepo.LeaveEventAsync(id, user);
-
-            if (!success)
+            if (!leaveResult.IsSuccess)
             {
-                return BadRequest("Collaborator could not be removed, They might be the event owner or do not exist");
+                return HandleResult(leaveResult);
             }
 
             return NoContent();

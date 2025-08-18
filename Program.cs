@@ -15,6 +15,10 @@ using EventApi.Repository;
 using EventApi.Services;
 using Hangfire;
 using Microsoft.AspNetCore.Builder;
+using MailerSendNetCore.Common.Extensions;
+using EventApi.ExeptionHandling;
+using EventApi.Filters;
+using FluentValidation;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -68,6 +72,8 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
 });
+
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 builder.Services.AddDbContext<AppDBContext>(options =>
 {
@@ -126,14 +132,14 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowedOrigins,
         policy =>
         {
-            // Be EXTREMELY specific. Add the exact origins.
             policy.WithOrigins(
-                    "http://localhost:3000",      // Your friend's dev server on his PC
-                    "http://127.0.0.1:3000",     // Also good to include
-                    "http://localhost:5500",      // Your local test page
-                    "http://127.0.0.1:5500",      // Your local test page
+                    "http://localhost:3000",      
+                    "http://127.0.0.1:3000",     
+                    "http://localhost:5500",      
+                    "http://127.0.0.1:5500",      
                     "https://localhost:7093",
-                    "https://mk25szk5-7093.inc1.devtunnels.ms"
+                    "https://mk25szk5-7093.inc1.devtunnels.ms",
+                    "https://q-rplatform.vercel.app"
                   )
                   .AllowAnyHeader()
                   .AllowAnyMethod();
@@ -147,20 +153,34 @@ builder.Services.AddHangfire(config => config
 
 builder.Services.AddHangfireServer();
 
+
+builder.Services.AddExceptionHandler<GlobalExeptionHandler>();
+builder.Services.AddProblemDetails();
+
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<IFileHandlingService, FileHandlingService>();
 builder.Services.AddScoped<IImageGenerationService, ImageGenerationService>();
+builder.Services.AddScoped<IEmailSevice, EmailService>();
+builder.Services.AddScoped<IFirebaseAdminService,FirebaseAdminService>();
+
+//builder.Services.AddScoped<SubscriptionCheckAttribute>();
+
+builder.Services.AddMailerSendEmailClient(options =>
+{
+    options.ApiToken = builder.Configuration.GetValue<string>("EmailSettings:MailerSendApiKey");    
+});
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseExceptionHandler();
 
 app.UseHttpsRedirection();
 

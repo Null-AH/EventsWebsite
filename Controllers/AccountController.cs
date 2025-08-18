@@ -8,15 +8,19 @@ using System.Threading.Tasks;
 using Azure.Identity;
 using EventApi.Data;
 using EventApi.DTO.Account;
+using EventApi.Interfaces;
 using EventApi.Models;
 using Google.Apis.Util;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 using NPOI.OpenXmlFormats.Wordprocessing;
+using NPOI.SS.Formula.Functions;
 
 namespace api.Controllers
 {
@@ -27,12 +31,18 @@ namespace api.Controllers
         private readonly UserManager<AppUser> _userManager;
         private readonly AppDBContext _context;
         private readonly ILogger<AccountController> _logger;
+        private readonly IFirebaseAdminService _firebaseAdmin;
+        private readonly IBackgroundJobClient _backgroundJobClient;
 
-        public AccountController(UserManager<AppUser> userManager, ILogger<AccountController> logger, AppDBContext context)
+        public AccountController
+        (UserManager<AppUser> userManager, ILogger<AccountController> logger, AppDBContext context
+        , IFirebaseAdminService firebaseAdmin, IBackgroundJobClient backgroundJobClient)
         {
             _userManager = userManager;
             _context = context;
             _logger = logger;
+            _firebaseAdmin = firebaseAdmin;
+            _backgroundJobClient = backgroundJobClient;
         }
 
         [HttpPost("sync")]
@@ -47,7 +57,7 @@ namespace api.Controllers
             var userName = User.FindFirst("name")?.Value;
             var picture = User.FindFirst("picture")?.Value;
 
-             //_logger.LogInformation("--- SYNC START ---");
+            //_logger.LogInformation("--- SYNC START ---");
             //_logger.LogInformation("Sync request for Firebase UID: {FirebaseUid}, Email: {Email}", firebaseUid, email);
 
             if (string.IsNullOrEmpty(firebaseUid) || string.IsNullOrEmpty(email))
@@ -63,7 +73,7 @@ namespace api.Controllers
 
             if (existingUser == null)
             {
-                 //_logger.LogInformation("User not found in DB. Creating new user.");
+                //_logger.LogInformation("User not found in DB. Creating new user.");
                 char initialChar = !string.IsNullOrEmpty(userName) ? userName[0] : email[0];
                 string placeHolderLetter = char.ToUpper(initialChar).ToString();
                 var newUser = new AppUser
@@ -80,7 +90,7 @@ namespace api.Controllers
 
                 if (!result.Succeeded)
                 {
-                     _logger.LogError("Failed to create new user. Errors: {Errors}", result.Errors);
+                    _logger.LogError("Failed to create new user. Errors: {Errors}", result.Errors);
                     return StatusCode(500, result.Errors);
                 }
                 userToProcess = newUser;
@@ -88,7 +98,7 @@ namespace api.Controllers
             }
             else
             {
-                 //_logger.LogInformation("Found existing user with AppUser ID: {UserId}. Checking for updates.", existingUser.Id);
+                //_logger.LogInformation("Found existing user with AppUser ID: {UserId}. Checking for updates.", existingUser.Id);
                 bool needsUpdate = false;
                 if (existingUser.FirebaseUid != firebaseUid)
                 {
@@ -153,17 +163,48 @@ namespace api.Controllers
                         invitation.Status = Status.Deleted;
                     }
                 }
-                
+
 
                 await _context.SaveChangesAsync();
-                 _logger.LogInformation("Saved changes for invitations.");
+                _logger.LogInformation("Saved changes for invitations.");
             }
-              else
+            else
             {
                 _logger.LogInformation("No pending invitations found for this user.");
             }
-             //_logger.LogInformation("--- SYNC END ---");
+            //_logger.LogInformation("--- SYNC END ---");
             return Ok("User synced successfully.");
+
+        }
+
+        [HttpGet("verify")]
+        [AllowAnonymous]
+        public async Task<IActionResult> FirebaseVerification([FromQuery] string oobCode, [FromQuery] string mode)
+        {
+
+            if (string.IsNullOrEmpty(oobCode))
+            {
+                return BadRequest("Action code is required.");
+            }
+
+            if (mode == "verifyEmail")
+            {
+                var userEmail = await _firebaseAdmin.GetEmailFromOobCodeAsync(oobCode);
+
+                if (userEmail == null)
+                {
+                    return Redirect("https://frontend/link-expired");
+                }
+
+                _backgroundJobClient.Enqueue<IEmailSevice>(service => service.SendVerificationEmailAsync(
+                    userEmail, oobCode
+                ));
+
+                return Redirect("https://frontend/check-your-email");
+            }
+
+            return BadRequest("Invalid action mode.");
+
         }
     }
 }

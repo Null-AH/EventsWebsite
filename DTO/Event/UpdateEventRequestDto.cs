@@ -22,7 +22,7 @@ namespace EventApi.DTO.Event
     {
         public int Id { get; set; }
         [Required]
-        [MaxLength(40, ErrorMessage = "Event name cannot be more than 40 letters")]
+        [MaxLength(20, ErrorMessage = "Event name cannot be more than 20 letters")]
         [JsonPropertyName("eventName")]
         public string Name { get; set; } = string.Empty;
         [Required]

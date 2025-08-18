@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 using EventApi.Data;
+using EventApi.ExeptionHandling.Exceptions;
 using EventApi.Interfaces;
 using EventApi.Mappers;
 using EventApi.Models;
@@ -35,16 +36,21 @@ namespace EventApi.Services
             .Include(e => e.Attendees).Include(e => e.TemplateElements)
             .FirstOrDefaultAsync(e => e.Id == eventId);
 
-            if (eventInfo == null || !eventInfo.TemplateElements.Any() || string.IsNullOrEmpty(eventInfo.BackgroundImageUri))
+            if (eventInfo == null)
             {
-                throw new Exception("Event generation failed: Event data or template elements or background image is missing");
+                throw new InvalidEventDataException($"Event with ID {eventId} not found.");
+            }
+
+            if (!eventInfo.TemplateElements.Any() || string.IsNullOrEmpty(eventInfo.BackgroundImageUri))
+            {
+                throw new InvalidEventDataException($"Event with ID {eventId} is missing template elements or a background image.");
             }
 
             var templateNameElement = eventInfo.TemplateElements.FirstOrDefault(e => e.ElementType.ToLower() == "Name".ToLower());
             var templateQrElement = eventInfo.TemplateElements.FirstOrDefault(e => e.ElementType.ToLower() == "QR".ToLower());
             if (templateNameElement == null || templateQrElement == null)
             {
-                throw new Exception("Event generation failed: Template is missing the required 'Element Type'");
+                throw new MisconfiguredTemplateException($"Event with ID {eventId} has a misconfigured template: missing 'Name' or 'QR' element.");
             }
 
             var imagePath = Path.Combine(_hostEnvironment.WebRootPath, eventInfo.BackgroundImageUri.TrimStart('/'));
@@ -98,8 +104,11 @@ namespace EventApi.Services
                 using (var shaper = new SKShaper(typeface))
                 {
                     float baselineY = (float)templateNameElement.Y + (targetHeight - textBounds.Height) / 2 - textBounds.Top;
-                    canvas.DrawShapedText(shaper,attendee.Name, (float)templateNameElement.X, baselineY, font, paint);
+                    float centeredX = (float)templateNameElement.X + (targetWidth / 2) - (targetHeight / 2);
+                    canvas.DrawShapedText(shaper,attendee.Name, centeredX, baselineY, font, paint);
                 }
+
+
                 //var qrCodePayload = Guid.NewGuid().ToString();
                 var qrCodePayload = attendee.Email;
                 using var qrGenerator = new QRCodeGenerator();

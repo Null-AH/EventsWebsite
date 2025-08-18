@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using EventApi.ExeptionHandling;
 using EventApi.Interfaces;
 using EventApi.Models;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Identity.Client;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
+using Polly.Caching;
 
 namespace EventApi.Services
 {
@@ -17,32 +20,37 @@ namespace EventApi.Services
         {
             _webHostEnvironment = webHost;
         }
-        public async Task<string> SaveImageAsync(IFormFile imageFile)
+
+        public async Task<Result<string>> SaveImageAsync(IFormFile imageFile)
         {
-            // 1. Create a unique filename to prevent overwriting files with the same name.
-            var uniqueFileName = $"{Guid.NewGuid().ToString()}_{imageFile.FileName}";
-
-            // 2. Define the path where the images will be stored.
-            //    This gets the absolute path to your wwwroot folder.
-            var uploadsFolder = Path.Combine(_webHostEnvironment.WebRootPath, "uploads/event_images");
-            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-            // 3. Ensure the directory exists.
-            Directory.CreateDirectory(uploadsFolder);
-
-            // 4. Save the file to the server.
-            //    'using' ensures the stream is properly closed and disposed of.
-            await using (var fileStream = new FileStream(filePath, FileMode.Create))
+            if (imageFile == null || imageFile.Length == 0)
             {
-                await imageFile.CopyToAsync(fileStream);
+                return Result<string>.Failure(FileErrors.NullOrEmpty);
             }
+            try
+            {
+                var uniqueFileName = $"{Guid.NewGuid().ToString()}_{imageFile.FileName}";
 
-            // 5. Return the publicly accessible URL path to the image.
-            //    We don't want to store the full C:\... path in the database.
-            return $"/uploads/event_images/{uniqueFileName}";
+                var uploadsFolder = Path.Combine(_webHostEnvironment.WebRootPath, "uploads/event_images");
+                var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                Directory.CreateDirectory(uploadsFolder);
+
+                await using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await imageFile.CopyToAsync(fileStream);
+                }
+
+                var imageUrl = $"/uploads/event_images/{uniqueFileName}";
+                return Result<string>.Success(imageUrl);
+            }
+            catch (Exception ex)
+            {
+                return Result<string>.Failure(FileErrors.SaveFailed);
+            }
         }
 
-        public async Task<List<Attendee>> ParseAttendeesAsync(IFormFile attendeeFile)
+        public async Task<Result<List<Attendee>>> ParseAttendeesAsync(IFormFile attendeeFile)
         {
 
             if (attendeeFile.ContentType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -55,10 +63,10 @@ namespace EventApi.Services
             }
             else
             {
-                throw new ArgumentException("Usupported file type provided");
+                return Result<List<Attendee>>.Failure(FileErrors.UnsupportedType);
             }
         }
-        public async Task<List<Attendee>> ParseXlsxFileAsync(IFormFile attendeeFile)
+        public async Task<Result<List<Attendee>>> ParseXlsxFileAsync(IFormFile attendeeFile)
         {
             var attendees = new List<Attendee>();
 
@@ -84,7 +92,7 @@ namespace EventApi.Services
                 if (headerRow == null)
                 {
                     // Handle case where the file is completely empty
-                    return new List<Attendee>();
+                    return Result<List<Attendee>>.Failure(FileErrors.InvalidHeaders);
                 }
 
                 for (int i = 0; i < headerRow.LastCellNum; i++)
@@ -108,7 +116,7 @@ namespace EventApi.Services
                     if (emailColumnIndex == -1) missingHeaders.Add("Email");
 
                     // This stops the process and sends an error message up the chain.
-                    throw new ArgumentException($"Invalid Excel file: Missing required header(s): {string.Join(", ", missingHeaders)}");
+                    return Result<List<Attendee>>.Failure(FileErrors.InvalidHeaders);
                 }
 
                 // Loop through the rows, starting from row 1 to skip the header (NPOI is 0-indexed)
@@ -131,14 +139,18 @@ namespace EventApi.Services
                         });
                     }
                 }
+                if (attendees.Any())
+                {
+                    return Result<List<Attendee>>.Failure(FileErrors.NoAttendeeFound);
+                }
             }
 
             // This is an async method, but NPOI's stream reading is synchronous.
             // We return a completed task to match the method signature.
-            return await Task.FromResult(attendees);
+            return Result<List<Attendee>>.Success(attendees);
         }
 
-        public async Task<List<Attendee>> ParseCsvFileAsync(IFormFile attendeeFile)
+        public async Task<Result<List<Attendee>>> ParseCsvFileAsync(IFormFile attendeeFile)
         {
             var attendees = new List<Attendee>();
 
@@ -148,7 +160,7 @@ namespace EventApi.Services
 
                 if (string.IsNullOrEmpty(headerLine))
                 {
-                    return attendees;
+                    return Result<List<Attendee>>.Failure(FileErrors.InvalidHeaders);
                 }
 
                 var nameAliases = new[] { "name", "attendee name", "full name" };
@@ -159,7 +171,7 @@ namespace EventApi.Services
 
                 var headers = headerLine.Split(',');
 
-                for (int i=0; i< headers.Count(); i++)
+                for (int i = 0; i < headers.Count(); i++)
                 {
                     var headerText = headers[i].Trim().ToLower();
                     if (!string.IsNullOrEmpty(headerText))
@@ -180,8 +192,7 @@ namespace EventApi.Services
                     if (nameColumnIndex == -1) missingHeaders.Add("Name");
                     if (emailColumnIndex == -1) missingHeaders.Add("Email");
 
-                    // This stops the process and sends an error message up the chain.
-                    throw new ArgumentException($"Invalid Excel file: Missing required header(s): {string.Join(", ", missingHeaders)}");
+                    return Result<List<Attendee>>.Failure(FileErrors.InvalidHeaders);
                 }
 
                 while (!reader.EndOfStream)
@@ -198,19 +209,23 @@ namespace EventApi.Services
                     var name = dataParts[nameColumnIndex].Trim();
                     var email = dataParts[emailColumnIndex].Trim();
 
-                        if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(email))
+                    if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(email))
+                    {
+                        attendees.Add(new Attendee
                         {
-                            attendees.Add(new Attendee
-                            {
-                                Name = name,
-                                Email = email
-                            });
-                        }
+                            Name = name,
+                            Email = email
+                        });
+                    }
                 }
 
+                if (attendees.Any())
+                {
+                    return Result<List<Attendee>>.Failure(FileErrors.NoAttendeeFound);
+                }
             }
 
-            return attendees;
+            return Result<List<Attendee>>.Success(attendees);
         }
     }
 }

@@ -13,6 +13,7 @@ namespace EventApi.Helpers
         GetCollaborators,
         DeleteCollaborators,
         EditCollaborators,
+        Leave,
         CheckIn,
         Count
     }
