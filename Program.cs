@@ -161,6 +161,7 @@ builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<IFileHandlingService, FileHandlingService>();
 builder.Services.AddScoped<IImageGenerationService, ImageGenerationService>();
 builder.Services.AddScoped<IEmailSevice, EmailService>();
+builder.Services.AddScoped<IAccountRepository,AccountRepository>();
 builder.Services.AddScoped<IFirebaseAdminService,FirebaseAdminService>();
 
 //builder.Services.AddScoped<SubscriptionCheckAttribute>();

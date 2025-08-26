@@ -104,7 +104,7 @@ namespace EventApi.Services
                 using (var shaper = new SKShaper(typeface))
                 {
                     float baselineY = (float)templateNameElement.Y + (targetHeight - textBounds.Height) / 2 - textBounds.Top;
-                    float centeredX = (float)templateNameElement.X + (targetWidth / 2) - (targetHeight / 2);
+                    float centeredX = (float)templateNameElement.X + (targetWidth/2) - (textBounds.Width/ 2);
                     canvas.DrawShapedText(shaper,attendee.Name, centeredX, baselineY, font, paint);
                 }
 

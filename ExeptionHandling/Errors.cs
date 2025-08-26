@@ -13,7 +13,14 @@ namespace EventApi.ExeptionHandling
             "User.SubscriptionLimit",
             "You cannot apply this action within your current subscription plan."
         );
-        
+        public static readonly Error CreationFailed = new(
+            "User.CreationFailed",
+            ""
+        );
+        public static readonly Error UpdateFailed = new(
+            "User.UpdateFailed",
+            ""
+        );
     }
     public static class EventErrors
     {
@@ -27,7 +34,7 @@ namespace EventApi.ExeptionHandling
         );
         public static readonly Error LimitReached = new(
             "Event.LimitReached",
-            "You have reached the maximum number of free events you can create."
+            "You have reached the maximum number of events you can create within your current subscription plan."
         );
     }
     public static class AttendeeErrors

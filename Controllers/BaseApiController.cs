@@ -44,10 +44,13 @@ namespace EventApi.Controllers
             {
                 case "NotFound":
                     return NotFound(CreateProblemDetails(error, StatusCodes.Status404NotFound));
+
                 case "Validation":
                     return BadRequest(CreateProblemDetails(error, StatusCodes.Status400BadRequest));
+
                 case "Conlflict":
                     return Conflict(CreateProblemDetails(error, StatusCodes.Status409Conflict));
+
                 case "LimitReached":
                 case "SubscriptionLimitReached":
                 case "Forbidden":

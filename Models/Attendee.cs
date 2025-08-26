@@ -7,6 +7,13 @@ using System.Threading.Tasks;
 
 namespace EventApi.Models
 {
+    public enum DeliveryStatus
+    {
+        NotSent,
+        Sent,
+        Delivered,
+        Failed
+    }
     [Table("Attendees")]
     public class Attendee
     {
@@ -15,10 +22,14 @@ namespace EventApi.Models
         public string Email { get; set; }
         public bool ChechkedIn { get; set; } = false;
         public DateTime? CheckedInTimestamp { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? CustomId { get; set; }
+        public string? Category { get; set; }
+        public DeliveryStatus InvitationStatus { get; set; } = DeliveryStatus.NotSent;
 
         public int EventId { get; set; }
         public Event Event { get; set; }
 
-        
+
     }
 }

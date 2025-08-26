@@ -634,11 +634,11 @@ namespace EventApi.Repository
             //Event limit check
             var userEventsCount = await _context.EventCollaborators.CountAsync(e => e.UserId == user.Id);
 
-            if (freeUserNotAllowedActions.Contains(action))
+            if (user.Tier == SubscriptionTier.Free && freeUserNotAllowedActions.Contains(action))
             {
                 return Result.Failure(UserErrors.SubscriptionLimit);
             }
-            if (proUserAllowedActions.Contains(action))
+            if (user.Tier == SubscriptionTier.Pro && proUserAllowedActions.Contains(action))
             {
                 return Result.Failure(UserErrors.SubscriptionLimit);
             }
@@ -647,7 +647,7 @@ namespace EventApi.Repository
             {
                 case SubscriptionTier.Free:
                     {
-                        if (userEventsCount >= 5)
+                        if (action == Actions.CreateFree && userEventsCount >= 5)
                         {
                             return Result.Failure(EventErrors.LimitReached);
                         }
@@ -655,7 +655,7 @@ namespace EventApi.Repository
                     }
                 case SubscriptionTier.Pro:
                     {
-                        if (userEventsCount >= 10)
+                        if ((action == Actions.CreatePro || action == Actions.CreateFree) && userEventsCount >= 10)
                         {
                             return Result.Failure(EventErrors.LimitReached);
                         }

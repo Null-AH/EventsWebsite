@@ -83,15 +83,16 @@ namespace EventApi.Services
 
                 var nameAliases = new[] { "name", "full name", "attendee name" };
                 var emailAliases = new[] { "email", "email address" };
+                var phoneNumberAliases = new[] { "phone", "number", "phone number" };
 
                 int nameColumnIndex = -1;
                 int emailColumnIndex = -1;
+                int phoneNumberIndex = -1;
 
                 IRow headerRow = sheet.GetRow(sheet.FirstRowNum);
 
                 if (headerRow == null)
                 {
-                    // Handle case where the file is completely empty
                     return Result<List<Attendee>>.Failure(FileErrors.InvalidHeaders);
                 }
 
@@ -108,6 +109,10 @@ namespace EventApi.Services
                     {
                         emailColumnIndex = i;
                     }
+                    if (phoneNumberAliases.Contains(headerText))
+                    {
+                        phoneNumberIndex = i;
+                    }
                 }
                 if (emailColumnIndex == -1 || nameColumnIndex == -1)
                 {
@@ -115,7 +120,6 @@ namespace EventApi.Services
                     if (nameColumnIndex == -1) missingHeaders.Add("Name");
                     if (emailColumnIndex == -1) missingHeaders.Add("Email");
 
-                    // This stops the process and sends an error message up the chain.
                     return Result<List<Attendee>>.Failure(FileErrors.InvalidHeaders);
                 }
 
@@ -125,9 +129,9 @@ namespace EventApi.Services
                     IRow row = sheet.GetRow(i);
                     if (row == null) continue; // Skip empty rows
 
-                    // Assuming Name is in Column 1 (index 0) and Email is in Column 2 (index 1)
                     var name = row.GetCell(nameColumnIndex)?.ToString()?.Trim();
                     var email = row.GetCell(emailColumnIndex)?.ToString()?.Trim();
+                    var phoneNumber = row.GetCell(phoneNumberIndex)?.ToString()?.Trim();
 
                     // Only add the attendee if a name & email exists
                     if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(email))
@@ -135,11 +139,12 @@ namespace EventApi.Services
                         attendees.Add(new Attendee
                         {
                             Name = name,
-                            Email = email
+                            Email = email,
+                            PhoneNumber = phoneNumber
                         });
                     }
                 }
-                if (attendees.Any())
+                if (!attendees.Any())
                 {
                     return Result<List<Attendee>>.Failure(FileErrors.NoAttendeeFound);
                 }
@@ -219,7 +224,7 @@ namespace EventApi.Services
                     }
                 }
 
-                if (attendees.Any())
+                if (!attendees.Any())
                 {
                     return Result<List<Attendee>>.Failure(FileErrors.NoAttendeeFound);
                 }
