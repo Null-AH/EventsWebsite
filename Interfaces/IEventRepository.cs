@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using EventApi.Controllers;
+using EventApi.DTO.AttendeeDTO;
 using EventApi.DTO.Event;
 using EventApi.DTO.Internal;
 using EventApi.DTO.Query;
@@ -24,6 +25,10 @@ namespace EventApi.Interfaces
         public Task<Result<EventSummaryDto>> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto, AppUser appUser);
 
         public Task<Result<string>> SendAttendeesInvitationsAsync(int id, AppUser user);
+        public Task<Result<List<Attendee>>> AddAttendeesAsync(List<AddAttendeesRequestDto> attendeesRequestDto, int eventId,AppUser user);
+        public Task<Result<List<EditAttendeesRequestDto>>> EditAttendeesAsync(List<EditAttendeesRequestDto> editAttendeesRequestDto, int eventId,AppUser user);
+        public Task<Result> DeleteAttendeesAsync(List<DeleteAttendeesRequestDto> deleteAttendeesRequestDto, int eventId,AppUser user);
+
         public Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto);
         public Task<Result<int?>> GetCurrentCheckedInCountAsync(int eventId, string userId);
 

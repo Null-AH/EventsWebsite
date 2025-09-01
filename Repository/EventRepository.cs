@@ -36,6 +36,8 @@ using brevo_csharp.Model;
 using SubscriptionTier = EventApi.Models.SubscriptionTier;
 using NPOI.SS.Formula.Functions;
 using Microsoft.CodeAnalysis.Differencing;
+using NPOI.SS.Util;
+using EventApi.DTO.AttendeeDTO;
 
 namespace EventApi.Repository
 {
@@ -588,6 +590,80 @@ namespace EventApi.Repository
             return Result<string>.Success("Sent");
         }
 
+        public async Task<Result<List<Attendee>>> AddAttendeesAsync(List<AddAttendeesRequestDto> addAttendees, int eventId, AppUser user)
+        {
+            var eventModel = await _context.EventCollaborators
+            .FirstOrDefaultAsync(e => e.UserId == user.Id && e.EventId == eventId);
+
+            addAttendees = addAttendees.GroupBy(dto => dto.Email.ToUpperInvariant()).Select(g => g.First()).ToList();
+
+            var attendees = addAttendees.AttendeesRequestDtoToAttendees(eventId);
+
+            var existingAttendees = await _context.Attendees
+            .Where(a => a.EventId == eventId &&
+             addAttendees.Select(a => a.Name).Contains(a.Name) &&
+             addAttendees.Select(a => a.Email).Contains(a.Email))
+             .ToListAsync();
+
+            if (existingAttendees.Any())
+            {
+                attendees = attendees.Except(existingAttendees).ToList();
+            }
+
+            await _context.Attendees.AddRangeAsync(attendees);
+            await _context.SaveChangesAsync();
+
+            return Result<List<Attendee>>.Success(attendees);
+        }
+        public async Task<Result<List<EditAttendeesRequestDto>>> EditAttendeesAsync(List<EditAttendeesRequestDto> editAttendees, int eventId, AppUser user)
+        {
+            var attendees = await _context.Attendees
+            .Where(e => editAttendees.Select(e => e.Id).Contains(e.Id) && e.EventId == eventId).ToListAsync();
+
+            if (!attendees.Any())
+            {
+                return Result<List<EditAttendeesRequestDto>>.Failure(AttendeeErrors.NotFound);
+            }
+            var editAttendeesWithSameEmails = editAttendees.GroupBy(dto => dto.Email.ToUpperInvariant()).Select(g => g.First()).ToList();
+
+            if (editAttendeesWithSameEmails.Count() != editAttendees.Count())
+            {
+                return Result<List<EditAttendeesRequestDto>>.Failure(AttendeeErrors.EditWithSameEmails);
+            }
+
+            foreach (var attendee in attendees)
+            {
+                var dto = editAttendees.First(e => e.Id == attendee.Id);
+                attendee.Name = dto.Name;
+                attendee.Email = dto.Email;
+                attendee.PhoneNumber = dto.PhoneNumber;
+                attendee.ChechkedIn = dto.ChechkedIn;
+                attendee.CustomId = dto.CustomId;
+                attendee.Category = dto.Category;
+                attendee.InvitationStatus = EnumUtils.ParseEnumMember<DeliveryStatus>(dto.InvitationStatus);
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Result<List<EditAttendeesRequestDto>>.Success(editAttendees);
+        }
+
+        public async Task<Result> DeleteAttendeesAsync
+        (List<DeleteAttendeesRequestDto> deleteAttendees, int eventId, AppUser user)
+        {
+            var attendees = await _context.Attendees
+            .Where(e => deleteAttendees.Select(e => e.Id).Contains(e.Id) && e.EventId == eventId).ToListAsync();
+
+            if (!attendees.Any())
+            {
+                return Result.Failure(AttendeeErrors.NotFound);
+            }
+
+            _context.Attendees.RemoveRange(attendees);
+            await _context.SaveChangesAsync();
+
+            return Result.Success();
+        }
 
         public async Task<Result> CheckPermissionAsync(AppUser appUser, int eventId, Actions action)
         {
@@ -610,7 +686,10 @@ namespace EventApi.Repository
                 Actions.GetCollaborators,
                 Actions.AddCollaborators,
                 Actions.EditCollaborators,
-                Actions.DeleteCollaborators
+                Actions.DeleteCollaborators,
+                Actions.AddAttendees,
+                Actions.EditAttendees,
+                Actions.DeleteAttendees
             };
 
             var usersRole = await _context.EventCollaborators
@@ -682,7 +761,7 @@ namespace EventApi.Repository
                     }
                 case SubscriptionTier.Pro:
                     {
-                        if ((action == Actions.CreatePro || action == Actions.CreateFree) && userEventsCount >= 10)
+                        if ((action == Actions.CreatePro || action == Actions.CreateFree) && userEventsCount >= 25)
                         {
                             return Result.Failure(EventErrors.LimitReached);
                         }

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection.Metadata;
 using System.Text.Json;
 using System.Threading.Tasks;
+using EventApi.DTO.AttendeeDTO;
 using EventApi.DTO.Event;
 using EventApi.DTO.Internal;
 using EventApi.DTO.Query;
@@ -22,6 +23,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
+using NPOI.SS.Formula.Functions;
 
 namespace EventApi.Controllers
 {
@@ -47,7 +49,7 @@ namespace EventApi.Controllers
         [Authorize]
         [LoadUser]
         [SubscriptionCheck(Actions.CreateFree)]
-        public async Task<IActionResult> CreateFree([FromForm]CreateEventRequestDto createEventRequestDto)
+        public async Task<IActionResult> CreateFree([FromForm] CreateEventRequestDto createEventRequestDto)
         {
             var serializerOptions = new JsonSerializerOptions
             {
@@ -98,14 +100,14 @@ namespace EventApi.Controllers
             };
 
             var createEventDto = JsonSerializer
-            .Deserialize<CreateEventDto>(eventRequestDto.EventInfo,serializerOptions);
+            .Deserialize<CreateEventDto>(eventRequestDto.EventInfo, serializerOptions);
 
             var templateElementsDto = JsonSerializer
-            .Deserialize<List<TemplateElementsDto>>(eventRequestDto.TemplateInfo,serializerOptions);
+            .Deserialize<List<TemplateElementsDto>>(eventRequestDto.TemplateInfo, serializerOptions);
 
             var user = HttpContext.Items["AppUser"] as AppUser;
 
-            
+
             // if (await _eventRepo.EventExistsAsync(user.Id, createEventDto))
             // {
             //     return Conflict("An event with this name and date has already been created.");
@@ -388,8 +390,54 @@ namespace EventApi.Controllers
 
             return HandleResult(sendResult);
         }
-        
 
+        [HttpPost("{id:int}/add-attendee")]
+        [Authorize]
+        [LoadUser]
+        //[SubscriptionCheck(Actions.AddAttendees)]
+        [CheckEventPermission(Actions.AddAttendees)]
+        public async Task<IActionResult> AddAttendees([FromBody] List<AddAttendeesRequestDto> addedAttendees, int id)
+        {
+            var user = HttpContext.Items["AppUser"] as AppUser;
+
+            var addResult = await _eventRepo.AddAttendeesAsync(addedAttendees, id, user);
+
+            return HandleResult(addResult);
+        }
+
+        [HttpPut("{id:int}/edit-attendee")]
+        [Authorize]
+        [LoadUser]
+        //[SubscriptionCheck(Actions.EditAttendees)]
+        [CheckEventPermission(Actions.EditAttendees)]
+        public async Task<IActionResult> EditAttendees([FromBody] List<EditAttendeesRequestDto> editedAttendees, int id)
+        {
+            var user = HttpContext.Items["AppUser"] as AppUser;
+
+            var editResult = await _eventRepo.EditAttendeesAsync(editedAttendees, id, user);
+
+            return HandleResult(editResult);
+        }
+        
+        [HttpPost("{id:int}/delete-attendee")]
+        [Authorize]
+        [LoadUser]
+        //[SubscriptionCheck(Actions.DeleteAttendees)]
+        [CheckEventPermission(Actions.DeleteAttendees)]
+        public async Task<IActionResult> DeleteAttendees([FromBody] List<DeleteAttendeesRequestDto> DeleteAttendees, int id)
+        {
+            var user = HttpContext.Items["AppUser"] as AppUser;
+
+            var deleteResult = await _eventRepo.DeleteAttendeesAsync(DeleteAttendees, id, user);
+
+            if (!deleteResult.IsSuccess)
+            {
+                return HandleResult(deleteResult);                
+            }
+
+            return NoContent();
+        }
+        
 
     }
 

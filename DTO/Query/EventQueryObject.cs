@@ -9,7 +9,7 @@ namespace EventApi.DTO.Query
     {
 
         public int PageNumber { get; set; } = 1;
-        public int PageSize { get; set; } = 8;
+        public int PageSize { get; set; } = 100;
         public bool IsDescending { get; set; } = false;
         public string OrderBy { get; set; } = "EventDate";
         public string? Name { get; set; }

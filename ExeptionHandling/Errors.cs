@@ -41,7 +41,11 @@ namespace EventApi.ExeptionHandling
     {
         public static readonly Error NotFound = new(
             "Attendee.NotFound",
-            "The attendee with the provided email could not be found for this event.");
+            "The attendees could not be found for this event.");
+        public static readonly Error EditWithSameEmails = new(
+            "Attendee.Validation",
+            "Two or more attendees to edit has the same new emails"
+        );
 
         public static readonly Error AlreadyCheckedIn = new(
             "Attendee.AlreadyCheckedIn",
@@ -81,7 +85,7 @@ namespace EventApi.ExeptionHandling
         public static readonly Error GeneralNotPermitedAction = new(
             "Collaborator.Forbidden",
             "Your role does not grant You permission to perform the action"
-            );       
+            );
 
     }
 
