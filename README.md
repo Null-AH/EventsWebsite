@@ -31,10 +31,9 @@ QrPlatform is a backend system designed to provide a complete, scalable solution
 
 ## API Documentation
 
-The complete API specification is available as a PDF within this repository. **Make sure you have added the PDF file to the project's root folder for this link to work.**
+The complete API specification is available as a PDF within this repository. 
 
-**[Click here to view the API Documentation](./QrPlatform%20API%20Specification%202.0.pdf)**
-*(Note: I updated the filename to match the one you provided)*
+**[Click here to view the API Documentation](./QrPlatform_API_Specification_2.0.pdf)**
 
 A summary of key endpoints is detailed within the documentation.
 
