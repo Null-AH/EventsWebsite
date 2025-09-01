@@ -1,7 +1,6 @@
 # QrPlatform - Event & Invitation Management API
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-blueviolet)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A comprehensive RESTful API built with ASP.NET Core for managing events, attendees, and collaborators, featuring a tiered freemium/pro model and asynchronous invitation generation.
 
@@ -11,12 +10,15 @@ QrPlatform is a backend system designed to provide a complete, scalable solution
 
 ## Key Features
 
-*   **Tiered Event Creation:** Supports both a "Free" tier with basic features and a "Pro" tier with advanced capabilities like custom invitation templates.
-*   **Asynchronous Invitation Generation:** Utilizes **Hangfire** to process image and QR code generation in the background, ensuring the API remains fast and responsive.
-*   **Role-Based Access Control (RBAC):** A robust collaborator system with distinct roles (Owner, Editor, Check-In Staff) and complex permission rules to manage event access securely.
-*   **Secure User Management:** Integrates with **Firebase Authentication** for handling user sign-up and login, with a sync process to keep the application's database up-to-date.
-*   **Full Attendee Management:** Complete CRUD (Create, Read, Update, Delete) functionality for managing event attendees, including file-based uploads (.xlsx, .csv).
-*   **External Service Integration:** Designed to work with the **Wasender API** for sending WhatsApp invitations and receiving delivery status updates via webhooks.
+*   **Secure User Authentication & Sync:**  Integrates with **Firebase Authentication** for handling user sign-up and login, with a sync process to keep the application's database up-to-date.
+
+*   **Event & Attendee Management:** Full CRUD (Create, Read, Update, Delete) functionality for events and attendees. Supports bulk attendee create, edit and delete, with robust server-side validation.
+
+*   **Role-Based Access Control (RBAC):** Features a robust, role-based permission system with distinct roles (**Owner**, **Editor**, **Check-In Staff**). Implements complex business logic for creator privileges and rules to ensure event ownership is never lost, demonstrating a deep understanding of authorization patterns.
+
+*   **Asynchronous & Customizable Invitation Generation:** Leverages **Hangfire** for non-blocking background processing to generate personalized invitation images with embedded QR codes. The system is designed for customization, supporting different background images and a variety of **custom fonts** to match event branding.
+
+*   **Automated WhatsApp Invitations & Status Tracking:** Integrates with the **Wasender API** to send generated invitations directly to attendees via WhatsApp. Includes a dedicated **webhook endpoint** to receive real-time delivery status updates (`Sent`, `Delivered`, `Read`), providing valuable feedback to the event organizer.
 
 ## Tech Stack
 
@@ -55,3 +57,10 @@ To run this project locally:
     ```sh
     dotnet run
     ```
+
+## Connect With Me
+
+If you have any questions about this project or would like to connect, you can find me here:
+
+*   **LinkedIn:** [https://www.linkedin.com/in/ahmed-almazni](https://www.linkedin.com/in/ahmed-almazni)
+*   **GitHub:** [https://github.com/Null-AH](https://github.com/Null-AH)
