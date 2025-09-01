@@ -25,10 +25,13 @@ namespace EventApi.Services
     {
         private readonly AppDBContext _context;
         private readonly IWebHostEnvironment _hostEnvironment;
-        public ImageGenerationService(AppDBContext context, IWebHostEnvironment hostEnvironment)
+        private readonly IFontManagerService _fontManagerService;
+
+        public ImageGenerationService(AppDBContext context, IWebHostEnvironment hostEnvironment, IFontManagerService fontManagerService)
         {
             _hostEnvironment = hostEnvironment;
             _context = context;
+            _fontManagerService = fontManagerService;
         }
         public async Task/*<string>*/ GenerateInvitationsForEventAsync(int eventId)
         {
@@ -57,9 +60,11 @@ namespace EventApi.Services
             using var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read);
             using var originalBitmap = SKBitmap.Decode(stream);
 
-            var fontPath = Path.Combine(_hostEnvironment.WebRootPath, "Fonts", "NotoNaskhArabic-Regular.ttf");
 
-            //using var typeface = SKTypeface.FromFamilyName(templateNameElement.FontTheme) ?? SKTypeface.Default;
+
+            var fontPath = Path.Combine(_hostEnvironment.WebRootPath, "Fonts", _fontManagerService.GetFontPath(templateNameElement.FontTheme));
+
+            //using var typeface = SKTypeface.FromFamilyName(templateNameElement.FontTheme) ?? SKTypeface.Default;            
             using var typeface = SKTypeface.FromFile(fontPath);
 
             using var paint = new SKPaint
@@ -86,7 +91,7 @@ namespace EventApi.Services
                 using var surface = SKSurface.Create(backgroundBitmap.Info, backgroundBitmap.GetPixels());
                 var canvas = surface.Canvas;
 
-                float textSize = targetHeight;
+                float textSize = targetHeight * 0.7f;
                 SKRect textBounds = new SKRect();
                 using var font = new SKFont(typeface);
 

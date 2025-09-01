@@ -164,6 +164,7 @@ builder.Services.AddScoped<IEmailSevice, EmailService>();
 builder.Services.AddScoped<IAccountRepository,AccountRepository>();
 builder.Services.AddScoped<IFirebaseAdminService,FirebaseAdminService>();
 builder.Services.AddScoped<IMessageService,WhatsAppService>();
+builder.Services.AddScoped<IFontManagerService,FontManagerService>();
 
 //builder.Services.AddScoped<SubscriptionCheckAttribute>();
 
