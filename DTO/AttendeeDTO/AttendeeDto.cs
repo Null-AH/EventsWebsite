@@ -12,5 +12,10 @@ namespace EventApi.DTO.Attendee
         public string Email { get; set; }
         public bool ChechkedIn { get; set; } = false;
         public DateTime? CheckedInTimestamp { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? CustomId { get; set; }
+        public string? Category { get; set; }
+        public string InvitationStatus { get; set; } = "Sent";
+
     }
 }

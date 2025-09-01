@@ -363,8 +363,7 @@ namespace EventApi.Controllers
 
         [HttpPost("{id:int}/leave")]
         [Authorize]
-        [LoadUser]
-        [SubscriptionCheck(Actions.Leave)]
+        [LoadUser]        
         [CheckEventPermission(Actions.Leave)]
         public async Task<IActionResult> LeaveEvent([FromRoute] int id)
         {
@@ -379,6 +378,16 @@ namespace EventApi.Controllers
             return NoContent();
         }
 
+        [HttpPost("{id:int}/invtation-send")]
+        [Authorize]
+        [LoadUser]
+        public async Task<IActionResult> SendAttendeeInvitations([FromRoute] int id)
+        {
+            var user = HttpContext.Items["AppUser"] as AppUser;
+            var sendResult = await _eventRepo.SendAttendeesInvitationsAsync(id, user);
+
+            return HandleResult(sendResult);
+        }
         
 
 

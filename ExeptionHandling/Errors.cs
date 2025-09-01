@@ -111,4 +111,19 @@ namespace EventApi.ExeptionHandling
         );
     }
 
+    public static class ConfigutationErrors
+    {
+        public static readonly Error ConfigurationError = new(
+            "Configuration.ServerError",
+            "Configuration Error!"
+        );
+    }
+    public static class ApiCallErrors
+    {
+        public static readonly Error WhatsAppWasenderError = new(
+            "ApiCall.ServerError",
+            "Failed to send the invitation due to an external service error!"
+        );
+    }
+
 }

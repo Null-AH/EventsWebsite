@@ -24,7 +24,7 @@ using Microsoft.OpenApi.Models;
 using NPOI.OpenXmlFormats.Wordprocessing;
 using NPOI.SS.Formula.Functions;
 
-namespace api.Controllers
+namespace EventApi.Controllers
 {
     [Route("api/account")]
     [ApiController]

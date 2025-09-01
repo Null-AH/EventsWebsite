@@ -23,6 +23,7 @@ namespace EventApi.Interfaces
         public Task<Result<Event>> DeleteEventByIdAsync(int id);
         public Task<Result<EventSummaryDto>> UpdateEvent(int id, UpdateEventRequestDto updateEventRequestDto, AppUser appUser);
 
+        public Task<Result<string>> SendAttendeesInvitationsAsync(int id, AppUser user);
         public Task<EventCheckInResultDto> EventCheckInAsync(int eventId, string userId, EventCheckInRequestDto eventCheckInRequestDto);
         public Task<Result<int?>> GetCurrentCheckedInCountAsync(int eventId, string userId);
 

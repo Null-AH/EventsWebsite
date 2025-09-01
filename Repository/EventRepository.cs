@@ -48,11 +48,12 @@ namespace EventApi.Repository
         private readonly ILogger<EventRepository> _logger;
         private readonly IEmailSevice _emailService;
         private readonly IBackgroundJobClient _backgroundJobClient;
+        private readonly IMessageService _messageService;
 
         public EventRepository
         (IEmailSevice emailSevice, ILogger<EventRepository> logger, AppDBContext context
         , IWebHostEnvironment webHost, IFileHandlingService fileHandle, UserManager<AppUser> userManager
-        , IBackgroundJobClient backgroundJobClient)
+        , IBackgroundJobClient backgroundJobClient,IMessageService messageService)
         {
             _context = context;
             _fileHandle = fileHandle;
@@ -60,6 +61,7 @@ namespace EventApi.Repository
             _userManager = userManager;
             _logger = logger;
             _emailService = emailSevice;
+            _messageService = messageService;
             _backgroundJobClient = backgroundJobClient;
         }
 
@@ -560,6 +562,31 @@ namespace EventApi.Repository
             return Result<bool>.Success(true);
         }
 
+        public async Task<Result<string>> SendAttendeesInvitationsAsync(int eventId, AppUser user)
+        {
+            var eventModel = await _context.EventCollaborators.Include(e => e.Event).ThenInclude(e => e.Attendees).FirstOrDefaultAsync(e => e.EventId == eventId);
+
+            if (eventModel == null)
+            {
+                return Result<string>.Failure(EventErrors.EventIdNotFound);
+            }
+
+            if (!eventModel.Event.Attendees.Any())
+            {
+                return Result<string>.Failure(AttendeeErrors.NotFound);
+            }
+
+            foreach (var attendee in eventModel.Event.Attendees)
+            {
+                if (attendee.InvitationStatus == DeliveryStatus.Sent) continue;
+
+                _backgroundJobClient.Enqueue<IMessageService>(service => service.SendAttendeeInvitationWhatsAppAsync(
+                    attendee.Id
+                ));
+            }
+
+            return Result<string>.Success("Sent");
+        }
 
 
         public async Task<Result> CheckPermissionAsync(AppUser appUser, int eventId, Actions action)
