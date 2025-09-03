@@ -253,6 +253,7 @@ namespace EventApi.Repository
             {
                 _context.EventCollaborators.RemoveRange(removeCollaborators);
             }
+
             _context.Events.Remove(eventModel);
 
             await _context.SaveChangesAsync();

@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Client;
+using SubscriptionTier = EventApi.Models.SubscriptionTier;
 
 namespace EventApi.Repository
 {
@@ -43,7 +44,8 @@ namespace EventApi.Repository
                     Email = email,
                     FirebaseUid = firebaseUid,
                     PictureUrl = picture ?? $"https://placehold.co/600x400/2B2543/FFFFFF/png?text={System.Net.WebUtility.UrlEncode(placeHolderLetter)}",
-                    DisplayName = userName
+                    DisplayName = userName,
+                    Tier = SubscriptionTier.Pro
                 };
 
                 var result = await _userManager.CreateAsync(newUser);
@@ -56,15 +58,15 @@ namespace EventApi.Repository
                     return Result<AppUser>.Failure(new Error(UserErrors.CreationFailed.Code, errors));
                 }
                 userToProcess = newUser;
-                //_logger.LogInformation("New user created successfully. AppUser ID: {UserId}", userToProcess.Id);
+                _logger.LogInformation("New user created successfully. AppUser ID: {UserId}", userToProcess.Id);
             }
             else
             {
-                //_logger.LogInformation("Found existing user with AppUser ID: {UserId}. Checking for updates.", existingUser.Id);
+                _logger.LogInformation("Found existing user with AppUser ID: {UserId}. Checking for updates.", existingUser.Id);
                 bool needsUpdate = false;
                 if (existingUser.FirebaseUid != firebaseUid)
                 {
-                    //_logger.LogWarning("Existing user was found by email but is MISSING FirebaseUid. Updating UID from {OldUid} to {NewUid}", existingUser.FirebaseUid, firebaseUid);
+                    _logger.LogWarning("Existing user was found by email but is MISSING FirebaseUid. Updating UID from {OldUid} to {NewUid}", existingUser.FirebaseUid, firebaseUid);
                     existingUser.FirebaseUid = firebaseUid;
                     needsUpdate = true;
                 }
