@@ -72,7 +72,7 @@ namespace EventApi.Services
                 IsAntialias = true,
                 Color = templateNameElement.FontColor == null ?
                         SKColors.Black
-                        : SKColor.Parse(templateNameElement.FontColor) //just in case the font color was null i need it to be black as a default option,
+                        : SKColor.Parse(templateNameElement.FontColor), //just in case the font color was null i need it to be black as a default option,                        
             };
 
             var targetWidth = (float)templateNameElement.Width;
@@ -95,21 +95,38 @@ namespace EventApi.Services
                 SKRect textBounds = new SKRect();
                 using var font = new SKFont(typeface);
 
-                while (true)
-                {
-                    font.Size = textSize;
-
-                    font.MeasureText(attendee.Name, out textBounds);
-
-                    if (textBounds.Width <= targetWidth && textBounds.Height <= targetHeight) break;
-                    textSize -= 1f;
-                    if (textSize <= 5) break;
-                }
-
                 using (var shaper = new SKShaper(typeface))
                 {
-                    float baselineY = (float)templateNameElement.Y + (targetHeight - textBounds.Height) / 2 - textBounds.Top;
-                    float centeredX = (float)templateNameElement.X + (targetWidth/2) - (textBounds.Width/ 2);
+                    while (true)
+                    {
+                        font.Size = textSize;
+
+                        font.MeasureText(attendee.Name, out textBounds);
+
+                        var shapedTextForSizing = shaper.Shape(attendee.Name, font);
+
+                        if (shapedTextForSizing.Width <= targetWidth && textBounds.Height <= targetHeight)
+                        {
+                             break;
+                        }
+                            
+                        textSize -= 0.3f;
+
+                        if (textSize <= 5)
+                        {
+                            break;
+                        }
+                    }
+
+                    var shapedText = shaper.Shape(attendee.Name, font);
+                    var fontMetrics = font.Metrics;
+
+                    float centeredX = (float)templateNameElement.X + (targetWidth / 2) - (shapedText.Width / 2);
+                    //float centerX = (float)templateNameElement.X + (targetWidth / 2);
+                    float boxCenterY = (float)templateNameElement.Y + targetHeight / 2;
+                    float textCenterYOffset = (fontMetrics.Ascent + fontMetrics.Descent) / 2;
+                    float baselineY = boxCenterY - textCenterYOffset;
+                    
                     canvas.DrawShapedText(shaper,attendee.Name, centeredX, baselineY, font, paint);
                 }
 
