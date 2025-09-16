@@ -1,23 +1,25 @@
+# Use the official ASP.NET Core runtime as a parent image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-WORKDIR /app
-EXPOSE 5206
-
-ENV ASPNETCORE_URLS=http://+:5206
-
 USER app
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-ARG configuration=Release
+WORKDIR /app
+EXPOSE 8080
+
+# Use the SDK image to build the app
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["EventApi/EventApi.csproj", "EventApi/"]
-RUN dotnet restore "EventApi/EventApi.csproj"
+COPY ["EventApi.csproj", "."]
+RUN dotnet restore "./EventApi.csproj"
 COPY . .
-WORKDIR "/src/EventApi"
-RUN dotnet build "EventApi.csproj" -c $configuration -o /app/build
+WORKDIR "/src"
+RUN dotnet build "./EventApi.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
+# Publish the application
 FROM build AS publish
-ARG configuration=Release
-RUN dotnet publish "EventApi.csproj" -c $configuration -o /app/publish /p:UseAppHost=false
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "EventApi.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
+# Build the final image
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
