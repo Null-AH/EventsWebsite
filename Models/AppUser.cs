@@ -15,6 +15,9 @@ namespace EventApi.Models
         public string? FirebaseUid { get; set; }
         public string? PictureUrl { get; set; }
         public string? DisplayName { get; set; }
-        public SubscriptionTier? Tier { get;set; }
+        public SubscriptionTier? Tier { get; set; }
+        
+        public List<EventCollaborators> EventCollaborators { get; set; } = new List<EventCollaborators>();
+
     }
 }

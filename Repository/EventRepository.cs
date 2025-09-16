@@ -24,9 +24,7 @@ using EventApi.Services;
 using EventApi.Helpers;
 using MathNet.Numerics;
 using Microsoft.Identity.Client;
-using Microsoft.AspNetCore.Http.HttpResults;
-using EventApi.Migrations;
-using System.Xml;
+using Microsoft.AspNetCore.Http.HttpResults;using System.Xml;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Hangfire;
 using EventApi.ExeptionHandling;
@@ -630,6 +628,21 @@ namespace EventApi.Repository
             if (editAttendeesWithSameEmails.Count() != editAttendees.Count())
             {
                 return Result<List<EditAttendeesRequestDto>>.Failure(AttendeeErrors.EditWithSameEmails);
+            }
+
+            var attendeesToEditEmails = editAttendees.Select(e => e.Email).ToList();
+            var attendeesToEditIds = editAttendees.Select(e => e.Id).ToList();
+
+            var existingAttendees = await _context.Attendees
+            .Where(a => a.EventId == eventId &&            
+             attendeesToEditEmails.Contains(a.Email) &&
+             !attendeesToEditIds.Contains(a.Id)
+             )
+             .ToListAsync();
+
+            if (existingAttendees.Any())
+            {
+                return Result<List<EditAttendeesRequestDto>>.Failure(AttendeeErrors.EditExistingEmails);
             }
 
             foreach (var attendee in attendees)

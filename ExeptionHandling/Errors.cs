@@ -46,6 +46,10 @@ namespace EventApi.ExeptionHandling
             "Attendee.Validation",
             "Two or more attendees to edit has the same new emails"
         );
+        public static readonly Error EditExistingEmails = new(
+            "Attendee.Validation",
+            "Attendees to edit new emails already exist"
+        );
 
         public static readonly Error AlreadyCheckedIn = new(
             "Attendee.AlreadyCheckedIn",

@@ -37,10 +37,18 @@ namespace EventApi.Data
             // };
 
             // builder.Entity<IdentityRole>().HasData(roles);
-
             builder.Entity<EventCollaborators>().HasKey(ec => new { ec.UserId, ec.EventId });
-            builder.Entity<EventCollaborators>().HasOne(ec => ec.AppUser).WithMany().HasForeignKey(ec => ec.UserId);
-            builder.Entity<EventCollaborators>().HasOne(ec => ec.Event).WithMany().HasForeignKey(ec => ec.EventId);
+            builder.Entity<EventCollaborators>().HasOne(ec => ec.AppUser).WithMany(a => a.EventCollaborators).HasForeignKey(ec => ec.UserId);
+            builder.Entity<EventCollaborators>().HasOne(ec => ec.Event).WithMany(e => e.EventCollaborators).HasForeignKey(ec => ec.EventId);
+
+            builder.Entity<AppUser>().ToTable("AspNetUsers");
+            builder.Entity<IdentityRole>().ToTable("AspNetRoles");
+            builder.Entity<IdentityUserToken<string>>().ToTable("AspNetUserTokens");
+            builder.Entity<IdentityUserRole<string>>().ToTable("AspNetUserRoles");
+            builder.Entity<IdentityUserLogin<string>>().ToTable("AspNetUserLogins");
+            builder.Entity<IdentityUserClaim<string>>().ToTable("AspNetUserClaims");
+            builder.Entity<IdentityRoleClaim<string>>().ToTable("AspNetRoleClaims");
+        
         }
     }
 }

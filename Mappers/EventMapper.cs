@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using EventApi.DTO.Event;
-using EventApi.Migrations;
 using EventApi.Models;
 using EventApi.Services;
 using Humanizer.DateTimeHumanizeStrategy;

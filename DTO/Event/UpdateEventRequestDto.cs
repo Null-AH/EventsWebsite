@@ -20,7 +20,6 @@ namespace EventApi.DTO.Event
     }
     public class UpdateEventRequestDto
     {
-        public int Id { get; set; }
         [Required]
         [MaxLength(20, ErrorMessage = "Event name cannot be more than 20 letters")]
         [JsonPropertyName("eventName")]

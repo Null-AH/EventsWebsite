@@ -1,0 +1,10 @@
+# Ignore the entire wwwroot folder during deployment
+wwwroot/downloads/
+wwwroot/uploads/
+
+# Also ignore other development folders
+bin
+obj
+.vs
+.vscode
+Docs

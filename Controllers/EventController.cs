@@ -210,7 +210,7 @@ namespace EventApi.Controllers
             }
         }
 
-        [HttpPut("edit")]
+        [HttpPut("{id:int}/edit")]
         [Authorize]
         [LoadUser]
         [CheckEventPermission(Actions.EventEdit)]
@@ -220,12 +220,12 @@ namespace EventApi.Controllers
         [ProducesResponseType(401)]
         [ProducesResponseType(200)]
 
-        public async Task<IActionResult> UpdateEvent([FromBody] UpdateEventRequestDto updateEventRequestDto)
+        public async Task<IActionResult> UpdateEvent(int id,[FromBody] UpdateEventRequestDto updateEventRequestDto)
         {
             var user = HttpContext.Items["AppUser"] as AppUser;
 
             if (!ModelState.IsValid) return BadRequest(ModelState);
-            var editedEvent = await _eventRepo.UpdateEvent(updateEventRequestDto.Id, updateEventRequestDto, user);
+            var editedEvent = await _eventRepo.UpdateEvent(id, updateEventRequestDto, user);
 
             return HandleResult(editedEvent);
         }
