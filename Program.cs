@@ -24,6 +24,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+// TEMPORARY LOGGING FOR DEBUGGING
+var connectionStringForDebug = builder.Configuration.GetConnectionString("DefaultConnection");
+Console.WriteLine($"--- My Connection String is: {connectionStringForDebug} ---");
+
+
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
