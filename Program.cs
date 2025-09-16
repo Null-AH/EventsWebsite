@@ -29,16 +29,24 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var firebaseProjectJsonPath = builder.Configuration["Firebase:ProjectJsonPath"];
-if (string.IsNullOrEmpty(firebaseProjectJsonPath))
-{
-    throw new ArgumentNullException("Firebase:ProjectJsonPath", "Firebase project JSON path is not configured.");
-}
+var firebaseJsonPath = builder.Configuration["Firebase:ProjectJsonPath"];
+var firebaseJson = builder.Configuration["FIREBASE_SERVICE_ACCOUNT_JSON"];
 
-FirebaseApp.Create(new AppOptions()
+var appOptions = new AppOptions();
+
+if (!string.IsNullOrEmpty(firebaseJson))
 {
-    Credential = GoogleCredential.FromFile(firebaseProjectJsonPath)
-});
+    appOptions.Credential = GoogleCredential.FromJson(firebaseJson);
+}
+else
+{
+    if (string.IsNullOrEmpty(firebaseJsonPath))
+    {
+        throw new ArgumentNullException(nameof(firebaseJsonPath), "Firebase project JSON path is not configured.");
+    }
+    appOptions.Credential = GoogleCredential.FromFile(firebaseJsonPath);
+}
+FirebaseApp.Create(appOptions);
 
 
 builder.Services.AddSwaggerGen(option =>
@@ -113,9 +121,8 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    // This creates a default policy that all [Authorize] attributes will use
     options.DefaultPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser() // The user must be authenticated
+        .RequireAuthenticatedUser() 
         .Build();
 });
 
